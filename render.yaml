@@ -1,0 +1,16 @@
+# One-click deploy of the API on Render's free tier: New > Blueprint > pick this repo.
+# Then set TMDB_API_KEY and GROQ_API_KEY in the service's Environment tab (never commit them).
+services:
+  - type: web
+    name: reelwise-api
+    runtime: docker
+    rootDir: backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: TMDB_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile

@@ -1,0 +1,83 @@
+# Reelwise: movie and TV recommendations you can check
+
+An Android app (Kotlin, Jetpack Compose, Material 3) backed by a small Python service that
+recommends movies and series, explains every pick, and lets you ask for something in plain
+words ("something like Dark but lighter").
+
+The "AI" here is specific and testable, not a chatbot guessing titles:
+
+| Part | What it does | How we know it works |
+|---|---|---|
+| **Collaborative model** | Implicit-feedback ALS + item-kNN trained on MovieLens ratings, folded in from your likes without retraining | Offline evaluation vs. popularity and item-kNN baselines on a temporal split; CI fails if it doesn't win (see `backend/reports/`) |
+| **Content model** | TF-IDF/SVD over genres, tags and plot text; carries brand-new users (cold start) | Separate cold-start evaluation on users the model never saw, given 5 ratings |
+| **Hybrid + diversity** | Blend whose weights are chosen on a validation split; MMR reranking so a list isn't ten near-identical films | Diversity, coverage and novelty reported next to accuracy |
+| **Natural-language Ask** | Groq LLM (free tier, `llama-3.3-70b-versatile`) turns a request into filters. **It never picks titles**: every result comes from TMDB | `test_llm_cannot_inject_titles_that_do_not_exist` feeds the LLM an invented title and checks only real catalog IDs come back |
+| **Explanations** | "Fans of *Arrival* also loved this", "Because you liked *Heat* · Crime" | Each reason points to a title you actually rated (tested) |
+
+TV series use TMDB's recommendations plus the content model; MovieLens has no TV data, so
+the offline evaluation covers movies only.
+
+## Repository layout
+
+```
+backend/   FastAPI service + recsys/ (models, evaluation, training) + tests
+android/   The Reelwise app
+.github/   CI: backend tests + MovieLens evaluation + Docker smoke test; Android lint, tests, screenshots, APKs
+```
+
+## Run the backend
+
+Keys stay on the server. The APK never contains them.
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+python -m recsys.train                     # downloads MovieLens (small) and trains, ~1 min
+export TMDB_API_KEY=...                    # v3 key or v4 read token both work
+export GROQ_API_KEY=...                    # optional; without it Ask uses a rule-based parser
+uvicorn app.main:app --reload --port 8000
+```
+
+Re-run the evaluation yourself with `python -m recsys.evaluate --dataset ml-latest-small`
+(`--dataset ml-32m` also works but item-kNN needs a lot of memory at that size).
+
+**Free hosting:** `render.yaml` deploys the Docker image on Render's free plan. Add the two
+keys as environment variables there. Free instances sleep when idle, so the first request
+after a while takes ~30 s.
+
+## Run the app
+
+```bash
+cd android
+./gradlew installDebug                                   # emulator -> backend on your machine (10.0.2.2:8000)
+./gradlew assembleRelease -PapiBaseUrl=https://your-api.onrender.com/
+```
+
+CI builds both APKs and uploads them as the `apks` artifact. Set the repository variable
+`API_BASE_URL` to your deployed backend so the CI-built APK works on a real phone.
+
+### What's in the app
+- **Taste quiz:** rate ~5 well-known titles chosen to span genres (MMR over genres).
+- **For you:** a hero carousel of top picks, then rows titled by their reason ("Because you liked …").
+  Long-press any poster to say Loved it / Not for me / Seen it / Not interested; the title disappears at once
+  and the list re-ranks a moment later.
+- **Ask:** type a mood or a comparison. The app shows how it read your request
+  (genres, exclusions, decade, "Like Dark") so a wrong reading is visible.
+- **Details:** where to watch in your region (stream/free/rent/buy), trailer, cast, more like this.
+- **Watchlist** and **Profile** (region, Material You colours, clear taste profile).
+- Works offline from the last cached feed; refreshes in the background on Wi-Fi (WorkManager).
+- Your ratings live only on the phone (Room) and are sent with each request; there are no accounts.
+
+## Data and licences
+- This product uses the TMDB API but is not endorsed or certified by TMDB.
+- Watch-provider data is supplied to TMDB by JustWatch.
+- MovieLens data (GroupLens Research) is licensed for non-commercial research use and may not be
+  redistributed. It is downloaded at build time, never committed. Commercial use needs GroupLens's permission.
+
+## Limits, stated plainly
+- The serving blend for TMDB candidates (TV, recent releases) uses hand-set weights; only the
+  MovieLens movie hybrid is validated offline.
+- Screenshot tests record images (CI artifact `screenshots`) but don't yet compare against
+  committed baselines.
+- Not yet done: Macrobenchmark startup timing on a device, an Accessibility Scanner pass on a
+  real device, and the five-person usability test (see `docs/usability-test.md`).
