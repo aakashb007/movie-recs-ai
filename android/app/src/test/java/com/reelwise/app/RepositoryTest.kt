@@ -101,7 +101,7 @@ class RepositoryTest {
         assertEquals("good-key" to "gsk_123", repo.savedKeys())
         assertEquals("good-key", services.requests.last().url.queryParameter("api_key"))
         // The keys live in their own file, which the backup rules leave out.
-        assertFalse(settingsFile.readText(Charsets.ISO_8859_1).contains("good-key"))
+        assertFalse(settingsFile.exists() && settingsFile.readText(Charsets.ISO_8859_1).contains("good-key"))
         assertTrue(secretsFile.readText(Charsets.ISO_8859_1).contains("good-key"))
     }
 
