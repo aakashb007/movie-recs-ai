@@ -8,7 +8,9 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -99,5 +101,8 @@ fun ReelwiseTheme(
         darkTheme -> DarkColors
         else -> LightColors
     }
-    MaterialTheme(colorScheme = colors, typography = ReelwiseTypography, content = content)
+    MaterialTheme(colorScheme = colors, typography = ReelwiseTypography) {
+        // Screens paint their own background; without this, text outside a Surface falls back to black.
+        CompositionLocalProvider(LocalContentColor provides colors.onBackground, content = content)
+    }
 }

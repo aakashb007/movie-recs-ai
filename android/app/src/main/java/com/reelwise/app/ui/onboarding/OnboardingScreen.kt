@@ -134,6 +134,7 @@ private fun Header(state: OnboardingUiState) {
         val progress by animateFloatAsState((state.ratedCount.coerceAtMost(target)).toFloat() / target, label = "p")
         LinearProgressIndicator(
             progress = { progress },
+            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(6.dp)
