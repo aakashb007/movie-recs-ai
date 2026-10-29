@@ -64,7 +64,8 @@ uvicorn app.main:app --reload --port 8000
 Re-run the evaluation yourself with `python -m recsys.evaluate --dataset ml-latest-small`
 (`--dataset ml-32m` also works but item-kNN needs a lot of memory at that size).
 
-**Free hosting:** `render.yaml` deploys the Docker image on Render's free plan. Add the two
+**Free hosting:** [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/aakashb007/movie-recs-ai)
+`render.yaml` deploys the Docker image on Render's free plan. Add the two
 keys as environment variables there. Free instances sleep when idle, so the first request
 after a while takes ~30 s.
 
