@@ -64,3 +64,18 @@ jobs:
           docker run -d --name api -p 8000:8000 -e TMDB_API_KEY=dummy movie-recs-api
           for i in $(seq 1 30); do curl -fsS localhost:8000/health && break; sleep 2; done
           curl -fsS localhost:8000/health | grep '"offline_model":true'
+
+  huggingface-image:
+    # The Hugging Face Space builds from deploy/huggingface/Dockerfile; prove it works before anyone pastes it.
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the Space image (clones main from GitHub)
+        run: docker build -t space-api deploy/huggingface
+      - name: Smoke test on the Space port
+        run: |
+          docker run -d --name space -p 7860:7860 -e TMDB_API_KEY=dummy space-api
+          for i in $(seq 1 30); do curl -fsS localhost:7860/health && break; sleep 2; done
+          curl -fsS localhost:7860/health | grep '"offline_model":true'
