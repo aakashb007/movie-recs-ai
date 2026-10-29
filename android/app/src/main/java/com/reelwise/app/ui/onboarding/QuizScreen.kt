@@ -9,8 +9,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -76,6 +74,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -265,6 +264,7 @@ private fun WatchedStep(state: QuizUiState, actions: QuizActions) {
 private fun QuizPoster(title: TitleSummary, watched: Boolean, loved: Boolean, actions: QuizActions) {
     val ring by animateColorAsState(if (watched) BrandRed else Color.Transparent, label = "ring")
     val press by animateFloatAsState(if (watched) 0.96f else 1f, spring(Spring.DampingRatioMediumBouncy), label = "press")
+    val shown by animateFloatAsState(if (watched) 1f else 0f, spring(Spring.DampingRatioMediumBouncy), label = "check")
     Column {
         Box(
             Modifier
@@ -283,18 +283,21 @@ private fun QuizPoster(title: TitleSummary, watched: Boolean, loved: Boolean, ac
                 },
         ) {
             ArtworkImage(Tmdb.poster(title.posterPath, "w185"), title.title, Modifier.fillMaxSize())
-            AnimatedVisibility(watched, enter = fadeIn(), exit = fadeOut()) {
-                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)))
-            }
-            AnimatedVisibility(
-                watched,
-                enter = scaleIn(spring(Spring.DampingRatioMediumBouncy)) + fadeIn(),
-                exit = scaleOut() + fadeOut(),
-                modifier = Modifier.align(Alignment.Center),
+            Box(Modifier.fillMaxSize().graphicsLayer { alpha = shown.coerceIn(0f, 1f) }.background(Color.Black.copy(alpha = 0.45f)))
+            Box(
+                Modifier
+                    .align(Alignment.Center)
+                    .graphicsLayer {
+                        alpha = shown.coerceIn(0f, 1f)
+                        scaleX = shown
+                        scaleY = shown
+                    }
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(BrandRed),
+                contentAlignment = Alignment.Center,
             ) {
-                Box(Modifier.size(38.dp).clip(CircleShape).background(BrandRed), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Rounded.Check, null, tint = Color.White)
-                }
+                Icon(Icons.Rounded.Check, null, tint = Color.White)
             }
             if (watched) {
                 Box(
