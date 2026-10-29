@@ -12,6 +12,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # publishes screenshots to the `screenshots` branch
     timeout-minutes: 40
     defaults:
       run:
@@ -51,3 +53,18 @@ jobs:
           path: |
             android/app/build/reports
             android/app/build/test-results
+      # Last step: it replaces the working tree. Keeps the README's screenshots current.
+      - name: Publish screenshots to the screenshots branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: .
+        run: |
+          shots=$(mktemp -d)
+          cp android/app/build/outputs/roborazzi/*.png "$shots"/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan screenshots-publish
+          git rm -rfq .
+          cp "$shots"/*.png .
+          git add -- *.png
+          git commit -qm "Screenshots for ${GITHUB_SHA::7}"
+          git push -f origin HEAD:screenshots

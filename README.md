@@ -14,6 +14,29 @@ The "AI" here is specific and testable, not a chatbot guessing titles:
 | **Natural-language Ask** | Groq LLM (free tier, `llama-3.3-70b-versatile`) turns a request into filters. **It never picks titles**: every result comes from TMDB | `test_llm_cannot_inject_titles_that_do_not_exist` feeds the LLM an invented title and checks only real catalog IDs come back |
 | **Explanations** | "Fans of *Arrival* also loved this", "Because you liked *Heat* · Crime" | Each reason points to a title you actually rated (tested) |
 
+### Measured results (MovieLens, held-out data, NDCG@10, higher is better)
+
+| | Popularity | Item-kNN | **Reelwise hybrid** |
+|---|---|---|---|
+| Existing users (latest 20% of history held out, 590 users) | 0.075 | 0.103 | **0.110** |
+| New users, 5 ratings (never seen in training, 122 users) | 0.310 | 0.248 | **0.356** |
+
+Every push re-runs this and CI fails if the hybrid stops beating both baselines in either row.
+Full tables (recall, coverage, diversity, novelty): [`backend/reports/eval-ml-latest-small.md`](backend/reports/eval-ml-latest-small.md).
+
+The first version lost to popularity for new users (0.283 vs 0.310): five ratings aren't
+enough to beat "what most people liked". The fix adds popularity weight that fades as a
+person's history grows, tuned on validation users kept separate from the test users.
+
+## Screenshots
+
+Rendered by the screenshot tests on every push to `main` (artwork shows title placeholders
+because tests run offline):
+
+| For you | Ask | Details | Taste quiz |
+|---|---|---|---|
+| ![For you](https://raw.githubusercontent.com/aakashb007/movie-recs-ai/screenshots/home_dark.png) | ![Ask](https://raw.githubusercontent.com/aakashb007/movie-recs-ai/screenshots/ask.png) | ![Details](https://raw.githubusercontent.com/aakashb007/movie-recs-ai/screenshots/detail.png) | ![Quiz](https://raw.githubusercontent.com/aakashb007/movie-recs-ai/screenshots/onboarding.png) |
+
 TV series use TMDB's recommendations plus the content model; MovieLens has no TV data, so
 the offline evaluation covers movies only.
 

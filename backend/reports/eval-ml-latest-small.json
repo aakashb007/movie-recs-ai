@@ -1,0 +1,108 @@
+{
+  "dataset": "ml-latest-small",
+  "source": "CI run 40947151557, commit f321a81",
+  "params": {
+    "als": {
+      "factors": 32,
+      "reg": 1.0,
+      "alpha": 5.0
+    },
+    "hybrid": {
+      "shrink": 10.0,
+      "knn_share": 0.5,
+      "pop_weight": 0.25,
+      "cold_pop": 0.5
+    }
+  },
+  "warm": {
+    "popularity": {
+      "ndcg@10": 0.0752,
+      "recall@10": 0.0743,
+      "coverage": 0.0263,
+      "diversity": 0.8185,
+      "novelty": 8.4797
+    },
+    "item_knn": {
+      "ndcg@10": 0.1025,
+      "recall@10": 0.1097,
+      "coverage": 0.14,
+      "diversity": 0.7751,
+      "novelty": 9.3572
+    },
+    "als": {
+      "ndcg@10": 0.0935,
+      "recall@10": 0.1068,
+      "coverage": 0.2159,
+      "diversity": 0.7804,
+      "novelty": 9.5855
+    },
+    "content": {
+      "ndcg@10": 0.0179,
+      "recall@10": 0.022,
+      "coverage": 0.4647,
+      "diversity": 0.1938,
+      "novelty": 12.4897
+    },
+    "hybrid": {
+      "ndcg@10": 0.1099,
+      "recall@10": 0.1201,
+      "coverage": 0.094,
+      "diversity": 0.7936,
+      "novelty": 8.9414
+    },
+    "hybrid+mmr": {
+      "ndcg@10": 0.1096,
+      "recall@10": 0.1199,
+      "coverage": 0.0932,
+      "diversity": 0.8234,
+      "novelty": 8.9304
+    }
+  },
+  "warm_users": 590,
+  "cold": {
+    "popularity": {
+      "ndcg@10": 0.3098,
+      "recall@10": 0.2873,
+      "coverage": 0.0041,
+      "diversity": 0.8103,
+      "novelty": 8.3095
+    },
+    "item_knn": {
+      "ndcg@10": 0.2476,
+      "recall@10": 0.2364,
+      "coverage": 0.129,
+      "diversity": 0.7386,
+      "novelty": 9.9877
+    },
+    "als": {
+      "ndcg@10": 0.2638,
+      "recall@10": 0.2593,
+      "coverage": 0.109,
+      "diversity": 0.7539,
+      "novelty": 9.5892
+    },
+    "content": {
+      "ndcg@10": 0.0708,
+      "recall@10": 0.0607,
+      "coverage": 0.2425,
+      "diversity": 0.2681,
+      "novelty": 12.0517
+    },
+    "hybrid": {
+      "ndcg@10": 0.3482,
+      "recall@10": 0.3287,
+      "coverage": 0.0375,
+      "diversity": 0.7815,
+      "novelty": 8.5705
+    },
+    "hybrid+mmr": {
+      "ndcg@10": 0.3563,
+      "recall@10": 0.338,
+      "coverage": 0.0345,
+      "diversity": 0.8129,
+      "novelty": 8.534
+    }
+  },
+  "cold_users": 122,
+  "cold_history": 5
+}
