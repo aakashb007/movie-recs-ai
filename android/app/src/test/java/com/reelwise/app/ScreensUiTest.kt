@@ -4,6 +4,8 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.runtime.getValue
@@ -75,7 +77,9 @@ class ScreensUiTest {
             }
         }
         compose.onNodeWithContentDescription("Top pick 1", substring = true).assertExists()
-        compose.onNodeWithText("Because you liked Title 99").assertExists()
+        // Every card here shares one reason, so it appears in several visible hero pages; the row heading is unique.
+        compose.onNodeWithText("BECAUSE YOU LIKED").assertExists()
+        compose.onAllNodesWithText("Because you liked Title 99", substring = true).onFirst().assertExists()
         compose.onNodeWithText("Rate titles").performClick()
         assertEquals(1, rateMore)
     }
