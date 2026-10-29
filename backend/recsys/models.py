@@ -162,8 +162,10 @@ class Hybrid(Recommender):
 
     The collaborative weight grows with history length, n / (n + shrink): with few
     ratings it is mostly noise, so content similarity carries a new user. knn_share
-    splits the collaborative weight between item-kNN and ALS. All three knobs are
-    chosen on a validation split, never on test data.
+    splits the collaborative weight between item-kNN and ALS. cold_pop adds popularity
+    in proportion to how little is known, (1 - cf): on MovieLens, five ratings are not
+    enough to beat "what most people liked". All knobs are chosen on validation users,
+    never on test data.
     """
 
     als: ALS
@@ -173,6 +175,7 @@ class Hybrid(Recommender):
     shrink: float = 5.0
     knn_share: float = 0.5
     pop_weight: float = 0.25
+    cold_pop: float = 0.0
     name: str = "hybrid"
 
     def fit(self, train, n_items):
@@ -181,7 +184,7 @@ class Hybrid(Recommender):
     def score(self, items, ratings):
         n = len(items)
         cf = n / (n + self.shrink) if n else 0.0
-        total = self.popularity_term()
+        total = (self.pop_weight + (1 - cf) * self.cold_pop) * self.popularity_z()
         if cf > 0:
             if self.knn_share < 1:
                 total = total + cf * (1 - self.knn_share) * _z(self.als.score(items, ratings))
@@ -191,10 +194,10 @@ class Hybrid(Recommender):
             total = total + (1 - cf) * _z(self.content.score(items, ratings))
         return total
 
-    def popularity_term(self) -> np.ndarray:
+    def popularity_z(self) -> np.ndarray:
         if not hasattr(self, "_pop_z"):
             self._pop_z = _z(self.popularity.counts)
-        return self.pop_weight * self._pop_z
+        return self._pop_z
 
 
 def _z(x: np.ndarray) -> np.ndarray:

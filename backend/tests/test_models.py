@@ -49,3 +49,21 @@ def test_mmr_keeps_best_first_and_increases_diversity():
     assert diverse[0] == 0
     assert intra_list_diversity({0: diverse}, vectors, 4) > intra_list_diversity({0: plain}, vectors, 4)
     assert mmr(candidates, relevance, vectors, 4, lam=1.0) == plain
+
+
+def test_cold_pop_only_matters_for_short_histories():
+    ds, train, _, hist = _setup()
+    content = Content().fit_text(ds.items.text.tolist())
+    pop = Popularity().fit(train, ds.n_items)
+    als, knn = ALS(factors=8, iterations=4).fit(train, ds.n_items), ItemKNN().fit(train, ds.n_items)
+    plain = Hybrid(als, knn, content, pop, shrink=5.0, pop_weight=0.0, cold_pop=0.0)
+    boosted = Hybrid(als, knn, content, pop, shrink=5.0, pop_weight=0.0, cold_pop=2.0)
+    items, ratings = hist[0]
+    short, long_ = (items[:1], ratings[:1]), (np.tile(items, 50), np.tile(ratings, 50))
+    top_pop = set(np.argsort(-pop.counts)[:10].tolist())
+    # with one rating, the boost pulls popular titles into the list...
+    assert len(set(boosted.recommend(*short, 10)) & top_pop) > len(set(plain.recommend(*short, 10)) & top_pop)
+    # ...and with a long history it fades out
+    gap_short = np.abs(boosted.score(*short) - plain.score(*short)).max()
+    gap_long = np.abs(boosted.score(*long_) - plain.score(*long_)).max()
+    assert gap_long < gap_short / 10
