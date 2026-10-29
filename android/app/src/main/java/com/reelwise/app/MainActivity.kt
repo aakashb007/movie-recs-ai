@@ -12,10 +12,12 @@ import androidx.lifecycle.lifecycleScope
 import com.reelwise.app.data.Repository
 import com.reelwise.app.data.local.Settings
 import com.reelwise.app.ui.navigation.ReelwiseNavHost
+import com.reelwise.app.ui.navigation.Start
 import com.reelwise.app.ui.theme.ReelwiseTheme
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 
 @AndroidEntryPoint
@@ -27,17 +29,24 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val settings = repository.settings.stateIn(lifecycleScope, SharingStarted.Eagerly, null)
-        // Hold the splash until settings load, so we never flash onboarding at a returning user.
-        splash.setKeepOnScreenCondition { settings.value == null }
+        val boot = combine(repository.settings, repository.hasTmdbKey) { s, hasKey -> s to hasKey }
+            .stateIn(lifecycleScope, SharingStarted.Eagerly, null)
+        // Hold the splash until settings load, so a returning user never sees setup flash by.
+        splash.setKeepOnScreenCondition { boot.value == null }
 
         setContent {
-            val current: Settings? by settings.collectAsStateWithLifecycle()
-            current?.let { s ->
-                // Decided once: finishing onboarding later navigates instead of swapping the graph.
-                val startOnboarding = remember { !s.onboardingDone }
-                ReelwiseTheme(dynamicColor = s.dynamicColor) {
-                    ReelwiseNavHost(startOnboarding = startOnboarding)
+            val current: Pair<Settings, Boolean>? by boot.collectAsStateWithLifecycle()
+            current?.let { (settings, hasKey) ->
+                // Decided once: finishing setup later navigates instead of swapping the graph.
+                val start = remember {
+                    when {
+                        !hasKey -> Start.KEYS
+                        !settings.onboardingDone -> Start.QUIZ
+                        else -> Start.HOME
+                    }
+                }
+                ReelwiseTheme(themeMode = settings.themeMode, dynamicColor = settings.dynamicColor) {
+                    ReelwiseNavHost(start = start)
                 }
             }
         }

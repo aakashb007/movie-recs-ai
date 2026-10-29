@@ -18,9 +18,6 @@ jobs:
     defaults:
       run:
         working-directory: android
-    env:
-      # Set the repository variable API_BASE_URL to your deployed backend to get an APK that works outside the emulator.
-      API_BASE_URL: ${{ vars.API_BASE_URL || 'http://10.0.2.2:8000/' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -29,11 +26,11 @@ jobs:
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
       - name: Lint
-        run: ./gradlew --no-daemon lintDebug -PapiBaseUrl="$API_BASE_URL"
+        run: ./gradlew --no-daemon lintDebug
       - name: Unit, UI (Robolectric) and screenshot tests
-        run: ./gradlew --no-daemon testDebugUnitTest -Proborazzi.test.record=true -PapiBaseUrl="$API_BASE_URL"
+        run: ./gradlew --no-daemon testDebugUnitTest -Proborazzi.test.record=true
       - name: Build debug and release APKs
-        run: ./gradlew --no-daemon assembleDebug assembleRelease -PapiBaseUrl="$API_BASE_URL"
+        run: ./gradlew --no-daemon assembleDebug assembleRelease
       - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
@@ -53,18 +50,29 @@ jobs:
           path: |
             android/app/build/reports
             android/app/build/test-results
-      # Last step: it replaces the working tree. Keeps the README's screenshots current.
-      - name: Publish screenshots to the screenshots branch
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      # Last step: it replaces the working tree. Screenshots of main feed the README; other
+      # branches publish to their own branch. The release APK (no keys inside: they are entered
+      # in the app) goes to apk-<branch>, so a phone can download it from a plain link.
+      - name: Publish screenshots and the release APK
+        if: github.event_name == 'push'
         working-directory: .
         run: |
-          shots=$(mktemp -d)
-          cp android/app/build/outputs/roborazzi/*.png "$shots"/
+          branch="${GITHUB_REF_NAME//\//-}"
+          shots_branch=$([ "$branch" = "main" ] && echo screenshots || echo "screenshots-$branch")
+          out=$(mktemp -d)
+          mkdir -p "$out/shots" "$out/apk"
+          cp android/app/build/outputs/roborazzi/*.png "$out/shots"/
+          cp android/app/build/outputs/apk/release/app-release.apk "$out/apk/reelwise-$branch.apk"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout --orphan screenshots-publish
-          git rm -rfq .
-          cp "$shots"/*.png .
-          git add -- *.png
-          git commit -qm "Screenshots for ${GITHUB_SHA::7}"
-          git push -f origin HEAD:screenshots
+          publish() { # $1 = source dir, $2 = branch
+            git checkout -q --orphan "publish-$2"
+            git rm -rfq . > /dev/null
+            git clean -fdxq
+            cp "$1"/* .
+            git add -A
+            git commit -qm "Build ${GITHUB_SHA::7}"
+            git push -qf origin "HEAD:$2"
+          }
+          publish "$out/shots" "$shots_branch"
+          publish "$out/apk" "apk-$branch"

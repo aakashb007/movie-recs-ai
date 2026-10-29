@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.reelwise.app.data.Clock
 import com.reelwise.app.data.Repository
+import com.reelwise.app.data.local.ThemeMode
+import com.reelwise.app.data.model.MediaType
 import com.reelwise.app.data.model.FeedFilter
 import com.reelwise.app.data.model.RecItem
 import com.reelwise.app.data.model.Signal
@@ -11,6 +13,7 @@ import com.reelwise.app.data.model.TitleKey
 import com.reelwise.app.data.model.TitleSummary
 import com.reelwise.app.data.userMessage
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.util.Calendar
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -40,27 +43,53 @@ data class HomeUiState(
     val firstLoad: Boolean = true,
     val error: String? = null,
     val hasContent: Boolean = false,
+    val saved: Set<TitleKey> = emptySet(),
+    val currentYear: Int = 2026,
 )
 
+fun RecItem.isNew(currentYear: Int): Boolean = (title.year ?: 0) >= currentYear - 1
+
 /**
- * Lays a ranked list out as a feed: the top five become the hero carousel, then items that
- * share a "because" title are grouped into rows, so the explanation is the row heading.
+ * Lays a ranked list out as a feed. The top five become the hero stack. Then, in order:
+ * fresh releases, rows grouped by the title that explains them ("Because you loved Arrival"),
+ * series not started yet, and whatever is left. Every item appears exactly once.
  */
-fun buildSections(items: List<RecItem>, heroSize: Int = 5, minGroup: Int = 3, maxGroups: Int = 3): Pair<List<RecItem>, List<FeedSection>> {
+fun buildSections(
+    items: List<RecItem>,
+    currentYear: Int,
+    heroSize: Int = 5,
+    minGroup: Int = 3,
+    maxGroups: Int = 3,
+): Pair<List<RecItem>, List<FeedSection>> {
     val hero = items.take(heroSize)
-    val rest = items.drop(heroSize)
+    var rest = items.drop(heroSize)
+    val sections = mutableListOf<FeedSection>()
+
+    val fresh = rest.filter { it.isNew(currentYear) }.take(12)
+    if (fresh.size >= minGroup) {
+        sections += FeedSection("NEW · ${currentYear - 1}–${currentYear % 100}", "Fresh releases for you", fresh)
+        rest = rest - fresh.toSet()
+    }
+
     val groups = rest
-        .groupBy { item -> item.because?.let { "because" to it.title } ?: ("reason" to item.reason) }
-        .filter { (key, value) -> value.size >= minGroup && key.second.isNotBlank() }
+        .filter { it.because != null }
+        .groupBy { it.because!!.title }
+        .filterValues { it.size >= minGroup }
         .entries
         .sortedByDescending { it.value.size }
         .take(maxGroups)
-    val used = groups.flatMap { it.value }.toSet()
-    val sections = groups.map { (key, value) ->
-        if (key.first == "because") FeedSection("Because you liked", key.second, value) else FeedSection(null, key.second, value)
-    }.toMutableList()
-    val leftovers = rest.filterNot { it in used }
-    if (leftovers.isNotEmpty()) sections += FeedSection(null, "More picks for you", leftovers)
+    for ((title, group) in groups) {
+        val watched = group.first().reason.startsWith("Because you watched")
+        sections += FeedSection(if (watched) "BECAUSE YOU WATCHED" else "BECAUSE YOU LOVED", title, group)
+        rest = rest - group.toSet()
+    }
+
+    val series = rest.filter { it.title.mediaType == MediaType.TV }
+    if (series.size >= minGroup) {
+        sections += FeedSection("NOT STARTED YET", "Series you'd binge", series)
+        rest = rest - series.toSet()
+    }
+    if (rest.isNotEmpty()) sections += FeedSection(null, "More picks for you", rest)
     return hero to sections
 }
 
@@ -78,13 +107,14 @@ class HomeViewModel @Inject constructor(
     val state: StateFlow<HomeUiState> = combine(
         filter,
         filter.flatMapLatest { repository.feed(it) },
-        hiddenKeys(),
+        combine(hiddenKeys(), savedKeys()) { hidden, saved -> hidden to saved },
         refreshing,
         error,
-    ) { f, feed, hidden, isRefreshing, err ->
+    ) { f, feed, (hidden, saved), isRefreshing, err ->
         // Rated or dismissed titles vanish at once; the re-ranked list follows a moment later.
         val items = feed?.response?.items.orEmpty().filterNot { it.title.key in hidden }
-        val (hero, sections) = buildSections(items)
+        val year = currentYear()
+        val (hero, sections) = buildSections(items, year)
         HomeUiState(
             filter = f,
             hero = hero,
@@ -94,6 +124,8 @@ class HomeViewModel @Inject constructor(
             firstLoad = feed == null && err == null,
             error = err,
             hasContent = items.isNotEmpty(),
+            saved = saved,
+            currentYear = year,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
@@ -111,6 +143,15 @@ class HomeViewModel @Inject constructor(
 
     private fun hiddenKeys(): Flow<Set<TitleKey>> =
         repository.interactions.map { list -> list.map { TitleKey(it.id, it.mediaType) }.toSet() }
+
+    private fun savedKeys(): Flow<Set<TitleKey>> =
+        repository.watchlist.map { list -> list.map { TitleKey(it.id, it.mediaType) }.toSet() }
+
+    private fun currentYear(): Int = Calendar.getInstance().apply { timeInMillis = clock.now() }.get(Calendar.YEAR)
+
+    fun toggleTheme(currentlyDark: Boolean) {
+        viewModelScope.launch { repository.setThemeMode(if (currentlyDark) ThemeMode.LIGHT else ThemeMode.DARK) }
+    }
 
     fun setFilter(value: FeedFilter) {
         filter.value = value

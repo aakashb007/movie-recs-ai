@@ -25,11 +25,18 @@ import com.reelwise.app.ui.ask.AskUiState
 import com.reelwise.app.ui.ask.interpretationChips
 import com.reelwise.app.ui.detail.DetailContent
 import com.reelwise.app.ui.detail.DetailUiState
+import com.reelwise.app.data.model.Freshness
+import com.reelwise.app.ui.home.HomeActions
 import com.reelwise.app.ui.home.HomeContent
 import com.reelwise.app.ui.home.HomeUiState
 import com.reelwise.app.ui.home.buildSections
-import com.reelwise.app.ui.onboarding.OnboardingContent
-import com.reelwise.app.ui.onboarding.OnboardingUiState
+import com.reelwise.app.ui.keys.KeysContent
+import com.reelwise.app.ui.keys.KeysUiState
+import com.reelwise.app.ui.onboarding.GenreChoice
+import com.reelwise.app.ui.onboarding.QuizActions
+import com.reelwise.app.ui.onboarding.QuizContent
+import com.reelwise.app.ui.onboarding.QuizStep
+import com.reelwise.app.ui.onboarding.QuizUiState
 import com.reelwise.app.ui.theme.ReelwiseTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -44,43 +51,83 @@ class ScreensUiTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
-    fun onboardingUnlocksAfterFiveRatingsWithALike() {
-        val titles = (1..6).map { title(it) }
-        var state by mutableStateOf(OnboardingUiState(loading = false, titles = titles))
+    fun quizNeedsThreeWatchedTitlesBeforeNext() {
+        var state by mutableStateOf(QuizUiState(loadingPool = false, pool = (1..6).map { title(it) }))
         compose.setContent {
             ReelwiseTheme {
-                OnboardingContent(
-                    state = state,
-                    onRate = { t, s -> state = state.copy(ratings = state.ratings + (t.key to s)) },
-                    onFinish = {},
-                    onRetry = {},
+                QuizContent(
+                    state,
+                    QuizActions(
+                        onToggleWatched = { t ->
+                            state = state.copy(watched = if (t.key in state.watched) state.watched - t.key else state.watched + (t.key to t))
+                        },
+                        onToggleLoved = { t -> state = state.copy(loved = state.loved + t.key) },
+                    ),
                 )
             }
         }
-        compose.onNodeWithText("Like at least 1, rate 5").assertIsNotEnabled()
-        listOf(1, 2, 3, 4).forEach { compose.onNodeWithContentDescription("Not for me: Title $it").performClick() }
-        compose.onNodeWithContentDescription("Loved it: Title 5").performClick()
-        compose.onNodeWithText("Show my picks").assertIsEnabled()
-        assertEquals(Signal.LIKE, state.ratings[TitleKey(5, MediaType.MOVIE)])
+        compose.onNodeWithText("Next").assertIsNotEnabled()
+        listOf(1, 2, 3).forEach { compose.onNodeWithContentDescription("Title $it, ${2000 + it}").performClick() }
+        compose.onNodeWithText("Next").assertIsEnabled()
+        compose.onNodeWithText("3 watched · 0 loved").assertExists()
+        compose.onNodeWithContentDescription("Loved Title 2").performClick()
+        assertEquals(setOf(TitleKey(2, MediaType.MOVIE)), state.loved)
+    }
+
+    @Test
+    fun quizReviewShowsEveryAnswerWithEditLinks() {
+        val watched = (1..3).associate { title(it).key to title(it) }
+        var editedTo: QuizStep? = null
+        compose.setContent {
+            ReelwiseTheme {
+                QuizContent(
+                    QuizUiState(
+                        step = QuizStep.REVIEW, loadingPool = false, watched = watched, loved = setOf(title(2).key),
+                        genres = mapOf("comedy" to GenreChoice.LOVE, "horror" to GenreChoice.AVOID),
+                        freshness = Freshness.LATEST, languages = setOf("hi"),
+                    ),
+                    QuizActions(onGoTo = { editedTo = it }),
+                )
+            }
+        }
+        compose.onNodeWithText("Comedy").assertExists()
+        compose.onNodeWithText("Horror").assertExists()
+        compose.onNodeWithText("Latest releases · Movies and series · Hindi").assertExists()
+        compose.onNodeWithContentDescription("Edit genres you love").performClick()
+        assertEquals(QuizStep.GENRES, editedTo)
+        compose.onNodeWithText("Looks good, save").assertIsEnabled()
+    }
+
+    @Test
+    fun keysScreenNeedsATmdbKeyAndShowsRejection() {
+        var state by mutableStateOf(KeysUiState())
+        compose.setContent {
+            ReelwiseTheme { KeysContent(state, { state = state.copy(tmdbKey = it) }, {}, {}, null, {}) }
+        }
+        compose.onNodeWithText("Test & save").assertIsNotEnabled()
+        state = state.copy(tmdbKey = "abc")
+        compose.onNodeWithText("Test & save").assertIsEnabled()
+        state = state.copy(error = "Your TMDB key was rejected. Check it in Settings.")
+        compose.onNodeWithText("Your TMDB key was rejected. Check it in Settings.").assertExists()
     }
 
     @Test
     fun homeShowsExplanationsAndColdStartPrompt() {
-        val (hero, sections) = buildSections((1..12).map { rec(it, because = 99) })
+        val (hero, sections) = buildSections((1..12).map { rec(it, because = 99) }, currentYear = 2026)
         var rateMore = 0
         compose.setContent {
             ReelwiseTheme {
                 HomeContent(
                     state = HomeUiState(hero = hero, sections = sections, coldStart = true, firstLoad = false, hasContent = true),
-                    onFilter = {}, onRefresh = {}, onOpenTitle = {}, onMore = {}, onRateMore = { rateMore++ },
+                    actions = HomeActions(onRateMore = { rateMore++ }),
                 )
             }
         }
-        compose.onNodeWithContentDescription("Top pick 1", substring = true).assertExists()
+        compose.onNodeWithContentDescription("Title 1, 2001", substring = true).assertExists()
         // Every card here shares one reason, so it appears in several visible hero pages; the row heading is unique.
-        compose.onNodeWithText("BECAUSE YOU LIKED").assertExists()
+        compose.onNodeWithText("BECAUSE YOU LOVED").assertExists()
         compose.onAllNodesWithText("Because you liked Title 99", substring = true).onFirst().assertExists()
-        compose.onNodeWithText("Rate titles").performClick()
+        compose.onNodeWithText("Take quiz").performClick()
         assertEquals(1, rateMore)
     }
 
@@ -90,11 +137,12 @@ class ScreensUiTest {
         compose.setContent {
             ReelwiseTheme {
                 HomeContent(
-                    state = HomeUiState(error = "Can't reach Reelwise.", firstLoad = false),
-                    onFilter = {}, onRefresh = { retries++ }, onOpenTitle = {}, onMore = {}, onRateMore = {},
+                    state = HomeUiState(error = "Add your TMDB key in Settings", firstLoad = false),
+                    actions = HomeActions(onRefresh = { retries++ }),
                 )
             }
         }
+        compose.onNodeWithText("Add your TMDB key in Settings").assertExists()
         compose.onNodeWithText("Try again").performClick()
         assertEquals(1, retries)
     }

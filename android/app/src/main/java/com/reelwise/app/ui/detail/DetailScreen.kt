@@ -163,7 +163,7 @@ private fun Body(
                     Text(
                         if (s.mediaType == MediaType.TV) "SERIES" else "FILM",
                         style = Eyebrow,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.tertiary,
                     )
                     Text(
                         s.title,

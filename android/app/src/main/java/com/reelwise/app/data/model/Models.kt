@@ -3,7 +3,10 @@ package com.reelwise.app.data.model
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-/** Wire models mirroring backend/app/schemas.py. */
+/**
+ * App models. They began as the backend's wire format (backend/app/schemas.py) and keep its
+ * snake_case names, which is also the shape cached feeds are stored in on the phone.
+ */
 
 @Serializable
 enum class MediaType(val wire: String) {
@@ -34,6 +37,7 @@ data class TitleSummary(
     @SerialName("vote_average") val voteAverage: Double = 0.0,
     @SerialName("vote_count") val voteCount: Int = 0,
     val genres: List<String> = emptyList(),
+    @SerialName("original_language") val originalLanguage: String? = null,
 ) {
     val key: TitleKey get() = TitleKey(id, mediaType)
 }
@@ -61,11 +65,40 @@ data class Interaction(
 )
 
 @Serializable
+enum class Freshness {
+    /** Released in the last 2 years. */
+    @SerialName("latest") LATEST,
+    /** Released in the last 10 years. */
+    @SerialName("recent") RECENT,
+    @SerialName("any") ANY,
+}
+
+@Serializable
+enum class Mix {
+    @SerialName("both") BOTH,
+    @SerialName("movies") MOVIES,
+    @SerialName("series") SERIES,
+}
+
+/** What the taste quiz learned, beyond the titles themselves (those are interactions). */
+@Serializable
+data class TasteProfile(
+    /** Canonical genre names, as in engine.Genres ("science fiction", "comedy"…). */
+    @SerialName("loved_genres") val lovedGenres: List<String> = emptyList(),
+    @SerialName("avoided_genres") val avoidedGenres: List<String> = emptyList(),
+    val freshness: Freshness = Freshness.ANY,
+    val mix: Mix = Mix.BOTH,
+    /** ISO 639-1 codes; empty means any language. */
+    val languages: List<String> = emptyList(),
+)
+
+@Serializable
 data class RecommendationRequest(
     val interactions: List<Interaction>,
     @SerialName("media_type") val mediaType: String,
     val region: String,
-    val limit: Int = 40,
+    val limit: Int = 60,
+    val taste: TasteProfile = TasteProfile(),
 )
 
 @Serializable
@@ -80,6 +113,7 @@ data class AskRequest(
     val interactions: List<Interaction>,
     val region: String,
     val limit: Int = 24,
+    val taste: TasteProfile = TasteProfile(),
 )
 
 @Serializable

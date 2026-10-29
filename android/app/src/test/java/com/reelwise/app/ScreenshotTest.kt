@@ -18,11 +18,17 @@ import com.reelwise.app.ui.ask.AskContent
 import com.reelwise.app.ui.ask.AskUiState
 import com.reelwise.app.ui.detail.DetailContent
 import com.reelwise.app.ui.detail.DetailUiState
+import com.reelwise.app.ui.home.HomeActions
 import com.reelwise.app.ui.home.HomeContent
 import com.reelwise.app.ui.home.HomeUiState
 import com.reelwise.app.ui.home.buildSections
-import com.reelwise.app.ui.onboarding.OnboardingContent
-import com.reelwise.app.ui.onboarding.OnboardingUiState
+import com.reelwise.app.ui.keys.KeysContent
+import com.reelwise.app.ui.keys.KeysUiState
+import com.reelwise.app.ui.onboarding.GenreChoice
+import com.reelwise.app.ui.onboarding.QuizActions
+import com.reelwise.app.ui.onboarding.QuizContent
+import com.reelwise.app.ui.onboarding.QuizStep
+import com.reelwise.app.ui.onboarding.QuizUiState
 import com.reelwise.app.ui.theme.ReelwiseTheme
 import org.junit.Rule
 import org.junit.Test
@@ -45,7 +51,10 @@ class ScreenshotTest {
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/$name.png")
     }
 
-    private val feed = (1..14).map { rec(it, because = if (it % 2 == 0) 90 else 91, reason = "Because you liked Title ${if (it % 2 == 0) 90 else 91}") }
+    private val feed = (1..14).map { i ->
+        val r = rec(i, because = if (i % 2 == 0) 90 else 91, reason = "Because you liked Title ${if (i % 2 == 0) 90 else 91}")
+        if (i in 6..8) r.copy(title = r.title.copy(year = 2026)) else r
+    }
 
     @Test
     fun homeDark() = shoot("home_dark") { home() }
@@ -55,22 +64,58 @@ class ScreenshotTest {
 
     @Composable
     private fun home() {
-        val (hero, sections) = buildSections(feed)
-        HomeContent(HomeUiState(hero = hero, sections = sections, firstLoad = false, hasContent = true), {}, {}, {}, {}, {})
+        val (hero, sections) = buildSections(feed, currentYear = 2026)
+        HomeContent(HomeUiState(hero = hero, sections = sections, firstLoad = false, hasContent = true), HomeActions())
     }
 
     @Test
     fun homeLoading() = shoot("home_loading") {
-        HomeContent(HomeUiState(), {}, {}, {}, {}, {})
+        HomeContent(HomeUiState(), HomeActions())
+    }
+
+    private val watched = (1..9).map { title(it, genre = listOf("Drama", "Comedy", "Sci-Fi")[it % 3]) }
+
+    @Test
+    fun quizWatched() = shoot("quiz_1_watched") {
+        QuizContent(
+            QuizUiState(
+                loadingPool = false, pool = watched,
+                watched = watched.take(4).associateBy { it.key }, loved = setOf(watched[1].key),
+            ),
+            QuizActions(),
+        )
     }
 
     @Test
-    fun onboarding() = shoot("onboarding") {
-        val titles = (1..8).map { title(it, genre = listOf("Drama", "Comedy", "Sci-Fi")[it % 3]) }
-        OnboardingContent(
-            OnboardingUiState(loading = false, titles = titles, ratings = mapOf(titles[0].key to Signal.LIKE, titles[2].key to Signal.DISLIKE)),
-            { _, _ -> }, {}, {},
+    fun quizGenres() = shoot("quiz_2_genres") {
+        QuizContent(
+            QuizUiState(
+                step = QuizStep.GENRES, loadingPool = false,
+                genres = mapOf("science fiction" to GenreChoice.LOVE, "thriller" to GenreChoice.LOVE, "horror" to GenreChoice.AVOID),
+            ),
+            QuizActions(),
         )
+    }
+
+    @Test
+    fun quizPrefs() = shoot("quiz_3_prefs") {
+        QuizContent(QuizUiState(step = QuizStep.PREFS, loadingPool = false, languages = setOf("en", "hi")), QuizActions())
+    }
+
+    @Test
+    fun quizReview() = shoot("quiz_4_review", dark = false) {
+        QuizContent(
+            QuizUiState(
+                step = QuizStep.REVIEW, loadingPool = false, watched = watched.take(5).associateBy { it.key },
+                loved = setOf(watched[0].key), genres = mapOf("crime" to GenreChoice.LOVE), languages = setOf("hi"),
+            ),
+            QuizActions(),
+        )
+    }
+
+    @Test
+    fun keys() = shoot("keys") {
+        KeysContent(KeysUiState(tmdbKey = "abcdef123456"), {}, {}, {}, null, {})
     }
 
     @Test

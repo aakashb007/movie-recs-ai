@@ -37,6 +37,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.reelwise.app.data.model.MediaType
 import com.reelwise.app.data.model.TitleSummary
 import java.util.Locale
@@ -86,6 +87,7 @@ fun PosterCard(
     modifier: Modifier = Modifier,
     reason: String? = null,
     width: Dp = 132.dp,
+    isNew: Boolean = false,
     onLongPress: (() -> Unit)? = null,
 ) {
     Column(
@@ -94,7 +96,7 @@ fun PosterCard(
             .clip(RoundedCornerShape(16.dp))
             .combinedClickable(onClick = onClick, onLongClick = onLongPress)
             .clearAndSetSemantics {
-                contentDescription = title.spokenDescription(reason)
+                contentDescription = (if (isNew) "New. " else "") + title.spokenDescription(reason)
                 role = Role.Button
                 if (onLongPress != null) {
                     customActions = listOf(CustomAccessibilityAction("More actions") { onLongPress(); true })
@@ -108,7 +110,8 @@ fun PosterCard(
                 .clip(RoundedCornerShape(16.dp)),
         ) {
             ArtworkImage(Tmdb.poster(title.posterPath), title.title, Modifier.fillMaxSize())
-            RatingPill(title.voteAverage, Modifier.align(Alignment.TopStart).padding(6.dp))
+            if (isNew) NewBadge(Modifier.align(Alignment.TopStart).padding(6.dp))
+            RatingPill(title.voteAverage, Modifier.align(Alignment.TopEnd).padding(6.dp))
         }
         Text(
             title.title,
@@ -129,13 +132,20 @@ fun PosterCard(
             Text(
                 reason,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.tertiary,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 2.dp, start = 2.dp, end = 2.dp),
             )
         }
         Spacer(Modifier.height(4.dp))
+    }
+}
+
+@Composable
+fun NewBadge(modifier: Modifier = Modifier) {
+    Surface(modifier = modifier, shape = RoundedCornerShape(4.dp), color = com.reelwise.app.ui.theme.ButtonRed, contentColor = Color.White) {
+        Text("NEW", style = com.reelwise.app.ui.theme.Eyebrow.copy(fontSize = 10.sp), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
     }
 }
 
@@ -187,7 +197,7 @@ fun TitleRow(
                     Text(
                         reason,
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.padding(top = 6.dp),
                     )
                 }
@@ -211,7 +221,7 @@ fun SectionHeader(eyebrow: String?, title: String, modifier: Modifier = Modifier
             Text(
                 eyebrow.uppercase(),
                 style = com.reelwise.app.ui.theme.Eyebrow,
-                color = MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.tertiary,
             )
         }
         Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)

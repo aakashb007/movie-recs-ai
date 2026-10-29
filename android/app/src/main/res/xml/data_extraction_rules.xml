@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Only what is listed moves. The API keys live in datastore/secrets, which is never listed. -->
 <data-extraction-rules>
     <cloud-backup>
         <include domain="database" path="reelwise.db" />

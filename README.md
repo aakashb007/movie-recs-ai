@@ -1,5 +1,11 @@
 # Reelwise: movie and TV recommendations you can check
 
+> **This branch (`on-device`) runs entirely on the phone. No server.** You paste your own
+> free TMDB key (and optionally a Groq key) on first launch; the recommendation engine in
+> `android/app/src/main/java/com/reelwise/app/engine/` is a Kotlin port of `backend/app/`
+> without the MovieLens model. Download the latest build:
+> [reelwise-on-device.apk](https://github.com/aakashb007/movie-recs-ai/raw/apk-on-device/reelwise-on-device.apk).
+
 An Android app (Kotlin, Jetpack Compose, Material 3) backed by a small Python service that
 recommends movies and series, explains every pick, and lets you ask for something in plain
 words ("something like Dark but lighter").
@@ -73,15 +79,21 @@ after a while takes ~30 s.
 
 ```bash
 cd android
-./gradlew installDebug                                   # emulator -> backend on your machine (10.0.2.2:8000)
-./gradlew assembleRelease -PapiBaseUrl=https://your-api.onrender.com/
+./gradlew installDebug        # or assembleRelease: app/build/outputs/apk/release/app-release.apk
 ```
 
-CI builds both APKs and uploads them as the `apks` artifact. Set the repository variable
-`API_BASE_URL` to your deployed backend so the CI-built APK works on a real phone.
+On first launch the app asks for your **TMDB key** (free at themoviedb.org → Settings → API;
+a v3 key or a v4 read access token both work) and checks it with TMDB before saving. The
+**Groq key** is optional and only makes Ask smarter. Keys are stored in their own DataStore
+file on the phone, which the backup rules leave out, and can be changed in Profile → API keys.
+
+CI builds both APKs on every push and also publishes the release APK to the `apk-<branch>`
+branch for a direct download.
 
 ### What's in the app
-- **Taste quiz:** rate ~5 well-known titles chosen to span genres (MMR over genres).
+- **Taste quiz (4 steps):** tick everything you've already watched (search covers all of TMDB) and
+  heart the ones you loved; love or ban genres; choose how new, movies or series, and languages;
+  review and save. Watched titles are never suggested; loved ones seed "because you loved".
 - **For you:** a hero carousel of top picks, then rows titled by their reason ("Because you liked …").
   Long-press any poster to say Loved it / Not for me / Seen it / Not interested; the title disappears at once
   and the list re-ranks a moment later.

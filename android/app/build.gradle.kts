@@ -8,8 +8,6 @@ plugins {
     alias(libs.plugins.roborazzi)
 }
 
-val apiBaseUrl: String = providers.gradleProperty("apiBaseUrl").get()
-
 android {
     namespace = "com.reelwise.app"
     compileSdk = 35
@@ -20,7 +18,6 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
-        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -84,12 +81,11 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
-    implementation(libs.retrofit)
-    implementation(libs.retrofit.kotlinx.serialization)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.coil.compose)
+    implementation(libs.palette)
     implementation(libs.datastore.preferences)
     implementation(libs.work.runtime)
 

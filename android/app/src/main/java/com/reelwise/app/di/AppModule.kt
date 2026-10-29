@@ -10,8 +10,14 @@ import com.reelwise.app.BuildConfig
 import com.reelwise.app.data.Clock
 import com.reelwise.app.data.DefaultRepository
 import com.reelwise.app.data.Repository
+import com.reelwise.app.data.local.KeyStore
 import com.reelwise.app.data.local.ReelwiseDatabase
+import com.reelwise.app.data.remote.LocalReelwiseApi
 import com.reelwise.app.data.remote.ReelwiseApi
+import com.reelwise.app.engine.KeyProvider
+import com.reelwise.app.engine.QueryParser
+import com.reelwise.app.engine.Recommender
+import com.reelwise.app.engine.TmdbClient
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -19,13 +25,11 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import java.util.concurrent.TimeUnit
+import javax.inject.Named
 import javax.inject.Singleton
 import kotlinx.serialization.json.Json
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
-import retrofit2.Retrofit
-import retrofit2.converter.kotlinx.serialization.asConverterFactory
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -42,10 +46,10 @@ object AppModule {
     @Singleton
     fun okHttp(): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        // Search waits on the LLM and several TMDB calls; give it room.
-        .readTimeout(45, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
         .apply {
             if (BuildConfig.DEBUG) {
+                // BASIC logs URLs; a v3 TMDB key rides in the query, so never log in release builds.
                 addInterceptor(HttpLoggingInterceptor().setLevel(HttpLoggingInterceptor.Level.BASIC))
             }
         }
@@ -53,12 +57,12 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun api(client: OkHttpClient, json: Json): ReelwiseApi = Retrofit.Builder()
-        .baseUrl(BuildConfig.API_BASE_URL)
-        .client(client)
-        .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
-        .build()
-        .create(ReelwiseApi::class.java)
+    fun tmdb(client: OkHttpClient, keys: KeyProvider, json: Json): TmdbClient = TmdbClient(client, keys, json)
+
+    @Provides
+    @Singleton
+    fun api(client: OkHttpClient, keys: KeyProvider, json: Json, tmdb: TmdbClient): ReelwiseApi =
+        LocalReelwiseApi(tmdb, Recommender(tmdb), QueryParser(client, keys, json))
 
     @Provides
     @Singleton
@@ -67,8 +71,16 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun dataStore(@ApplicationContext context: Context): DataStore<Preferences> =
+    @Named("settings")
+    fun settingsStore(@ApplicationContext context: Context): DataStore<Preferences> =
         PreferenceDataStoreFactory.create { context.preferencesDataStoreFile("settings") }
+
+    /** Separate file so backup rules can leave the keys out. */
+    @Provides
+    @Singleton
+    @Named("secrets")
+    fun secretsStore(@ApplicationContext context: Context): DataStore<Preferences> =
+        PreferenceDataStoreFactory.create { context.preferencesDataStoreFile("secrets") }
 
     @Provides
     fun clock(): Clock = Clock { System.currentTimeMillis() }
@@ -76,7 +88,10 @@ object AppModule {
 
 @Module
 @InstallIn(SingletonComponent::class)
-abstract class RepositoryModule {
+abstract class BindingsModule {
     @Binds
     abstract fun repository(impl: DefaultRepository): Repository
+
+    @Binds
+    abstract fun keyProvider(impl: KeyStore): KeyProvider
 }
