@@ -249,7 +249,7 @@ class DefaultRepository @Inject constructor(
                 Signal.DISMISS -> TasteLearner.NOT_INTERESTED
                 Signal.DISLIKE -> TasteLearner.DISLIKE
             }
-            featuresOf(i.mediaType, i.id)?.let { evidence += Evidence(it, weight, i.updatedAt) }
+            featuresOf(i.mediaType, i.id)?.let { evidence += Evidence(it, weight, i.updatedAt, genreOnly = i.signal == Signal.DISMISS) }
         }
         for (w in db.watchlist().getAll()) {
             acted += TasteLearner.key(w.mediaType, w.id)

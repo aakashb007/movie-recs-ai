@@ -19,8 +19,12 @@ data class TitleFeatures(
     }
 }
 
-/** One thing the person did with a title, as a signed weight (see [TasteLearner] for the scale). */
-data class Evidence(val title: TitleFeatures, val weight: Double, val at: Long)
+/**
+ * One thing the person did with a title, as a signed weight (see [TasteLearner] for the scale).
+ * [genreOnly] evidence is about the kind of title (its genres and film vs series), so it barely
+ * touches the language and decade.
+ */
+data class Evidence(val title: TitleFeatures, val weight: Double, val at: Long, val genreOnly: Boolean = false)
 
 /**
  * Learns the person's taste from what they do, not only from the quiz. Each action is evidence
@@ -29,13 +33,25 @@ data class Evidence(val title: TitleFeatures, val weight: Double, val at: Long)
  * so one rating doesn't swing the feed.
  */
 object TasteLearner {
+    /** Loved it. */
     const val LIKE = 1.0
+
+    /** My list: not watched yet, wants to. */
     const val WATCHLIST = 0.6
-    const val SEEN = 0.3
+
+    /** Already watched; says little about liking it, mostly "don't suggest it again". */
+    const val SEEN = 0.1
     const val OPENED = 0.15
     const val SKIPPED = -0.1
-    const val NOT_INTERESTED = -0.5
-    const val DISLIKE = -1.0
+
+    /** "Not interested": may be good, but not this genre or type of title ([Evidence.genreOnly]). */
+    const val NOT_INTERESTED = -1.0
+
+    /** "Not for me": twice as strong as not interested. */
+    const val DISLIKE = -2.0
+
+    /** How much genre-only evidence counts for language and decade. */
+    private const val SIDE_FEATURES = 0.25
 
     const val HALF_LIFE_DAYS = 120.0
     private const val PRIOR = 2.0
@@ -59,8 +75,9 @@ object TasteLearner {
             // Spread a title's weight over its genres, so a five-genre title doesn't count five times.
             val perGenre = w / maxOf(e.title.genres.size, 1).toDouble().pow(0.5)
             e.title.genres.forEach { genres.add(it, perGenre) }
-            e.title.language?.let { languages.add(it, w) }
-            e.title.year?.let { decades.add(it / 10 * 10, w) }
+            val side = if (e.genreOnly) w * SIDE_FEATURES else w
+            e.title.language?.let { languages.add(it, side) }
+            e.title.year?.let { decades.add(it / 10 * 10, side) }
             types.add(e.title.mediaType, w)
         }
         val tired = skips.filter { (k, n) -> n >= TIRED_AFTER && k !in acted }.keys

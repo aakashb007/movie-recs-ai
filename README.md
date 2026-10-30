@@ -103,7 +103,9 @@ branch for a direct download.
   or films from before 2000 including cult favourites, still ranked by your taste.
 - **Minimum rating** (quiz): IMDb when you add a free OMDb key (Profile → API keys), otherwise TMDB.
 - **Learns from you:** every rating, My list add, opened details page and swiped-past card is evidence
-  for or against a title's genres, language, decade and film-vs-series. Recent activity counts more
+  for or against a title's genres, language, decade and film-vs-series: Loved it +1, My list (want to
+  watch) +0.6, opened +0.15, Seen it +0.1 (it mostly means "don't suggest it again"), swiped past −0.1,
+  Not interested −1 (aimed at the genre and type, barely at language and decade), Not for me −2. Recent activity counts more
   (half-life 120 days) and one-off reactions are shrunk towards neutral, so a single rating doesn't
   swing the feed. The result moves each pick by up to ±0.2 on top of the content and "fans also liked"
   scores, pushes down titles you keep swiping past, and is shown in Profile → **What Reelwise has learned**.

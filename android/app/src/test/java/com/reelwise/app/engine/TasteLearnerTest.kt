@@ -47,7 +47,7 @@ class TasteLearnerTest {
             emptyMap(), emptySet(), now,
         )
         assertEquals(0.6, learned.genres.getValue("Crime"), 1e-9) // 3 / (3 + prior 2)
-        assertEquals(-0.5, learned.genres.getValue("Horror"), 1e-9)
+        assertEquals(-4.0 / 6.0, learned.genres.getValue("Horror"), 1e-9) // "not for me" counts double
         assertEquals(5, learned.evidence)
     }
 
@@ -75,6 +75,27 @@ class TasteLearnerTest {
             emptyMap(), emptySet(), now,
         )
         assertTrue(learned.genres.getValue("Romance") < 0)
+    }
+
+    @Test
+    fun notInterestedIsAboutTheGenreNotTheLanguageOrDecade() {
+        val learned = TasteLearner.learn(
+            listOf(Evidence(f(1, "Horror", lang = "ko", year = 2012), TasteLearner.NOT_INTERESTED, now, genreOnly = true)),
+            emptyMap(), emptySet(), now,
+        )
+        assertEquals(-1.0 / 3.0, learned.genres.getValue("Horror"), 1e-9)
+        assertEquals(-0.25 / 2.25, learned.languages.getValue("ko"), 1e-9)
+        assertEquals(-0.25 / 2.25, learned.decades.getValue(2010), 1e-9)
+    }
+
+    @Test
+    fun notForMeWeighsTwiceNotInterested() {
+        fun horror(weight: Double) = TasteLearner.learn(
+            listOf(Evidence(f(1, "Horror"), weight, now, genreOnly = weight == TasteLearner.NOT_INTERESTED)),
+            emptyMap(), emptySet(), now,
+        ).genres.getValue("Horror")
+        assertTrue(horror(TasteLearner.DISLIKE) < horror(TasteLearner.NOT_INTERESTED))
+        assertEquals(2.0, TasteLearner.DISLIKE / TasteLearner.NOT_INTERESTED, 1e-9)
     }
 
     @Test
