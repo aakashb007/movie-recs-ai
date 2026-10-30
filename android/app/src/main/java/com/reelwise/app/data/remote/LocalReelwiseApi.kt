@@ -4,6 +4,7 @@ import com.reelwise.app.data.model.AskRequest
 import com.reelwise.app.data.model.AskResponse
 import com.reelwise.app.data.model.MediaType
 import com.reelwise.app.data.model.OnboardingResponse
+import com.reelwise.app.data.model.PersonDetail
 import com.reelwise.app.data.model.RecommendationRequest
 import com.reelwise.app.data.model.RecommendationResponse
 import com.reelwise.app.data.model.TitleDetail
@@ -41,4 +42,6 @@ class LocalReelwiseApi(
     }
 
     override suspend fun search(query: String): List<TitleSummary> = recommender.search(query)
+
+    override suspend fun person(id: Int): PersonDetail = tmdb.person(id)
 }

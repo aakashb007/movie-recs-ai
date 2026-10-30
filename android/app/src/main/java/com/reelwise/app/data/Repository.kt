@@ -13,6 +13,7 @@ import com.reelwise.app.data.model.AskResponse
 import com.reelwise.app.data.model.FeedFilter
 import com.reelwise.app.data.model.Interaction
 import com.reelwise.app.data.model.MediaType
+import com.reelwise.app.data.model.PersonDetail
 import com.reelwise.app.data.model.RecommendationRequest
 import com.reelwise.app.data.model.RecommendationResponse
 import com.reelwise.app.data.model.Signal
@@ -61,6 +62,7 @@ interface Repository {
     suspend fun onboarding(): Result<List<TitleSummary>>
     suspend fun ask(query: String): Result<AskResponse>
     suspend fun detail(mediaType: MediaType, id: Int): Result<TitleDetail>
+    suspend fun person(id: Int): Result<PersonDetail>
 
     /** Records a signal for a title; null clears it. */
     suspend fun rate(title: TitleSummary, signal: Signal?)
@@ -147,6 +149,8 @@ class DefaultRepository @Inject constructor(
     override suspend fun detail(mediaType: MediaType, id: Int): Result<TitleDetail> = safely {
         api.title(mediaType.wire, id, settings.first().region)
     }
+
+    override suspend fun person(id: Int): Result<PersonDetail> = safely { api.person(id) }
 
     override suspend fun rate(title: TitleSummary, signal: Signal?) {
         if (signal == null) {

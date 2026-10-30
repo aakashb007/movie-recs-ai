@@ -103,13 +103,40 @@ class FakeServices(
                     putJsonArray("flatrate") { add(buildJsonObject { put("provider_name", "StreamCo"); put("logo_path", "/s.png") }) }
                 } } }
                 putJsonObject("videos") { putJsonArray("results") { add(buildJsonObject { put("site", "YouTube"); put("type", "Trailer"); put("key", "abc123") }) } }
-                putJsonObject("credits") { putJsonArray("cast") { add(buildJsonObject { put("name", "Ada Actor"); put("character", "Lead") }) } }
+                putJsonObject("credits") {
+                    putJsonArray("cast") { add(buildJsonObject { put("id", 600); put("name", "Ada Actor"); put("character", "Lead") }) }
+                    putJsonArray("crew") {
+                        add(buildJsonObject { put("id", 500); put("name", "Dee Rector"); put("job", "Director") })
+                        add(buildJsonObject { put("id", 501); put("name", "Pro Ducer"); put("job", "Producer") })
+                    }
+                }
+                if (m.groupValues[1] == "tv") putJsonArray("created_by") { add(buildJsonObject { put("id", 502); put("name", "Cree Ator") }) }
                 putJsonObject("recommendations") { putJsonArray("results") {} }
                 if (m.groupValues[1] == "movie") put("runtime", 120)
                 val imdb = "tt" + m.groupValues[2].padStart(7, '0')
                 if (m.groupValues[1] == "movie") put("imdb_id", imdb) else putJsonObject("external_ids") { put("imdb_id", imdb) }
             }
             return respond(req, 200, detail.toString())
+        }
+        Regex("/person/(\\d+)").matchEntire(path)?.let { m ->
+            if (m.groupValues[1] != "500") return respond(req, 404, "{}")
+            fun credit(type: String, id: Int, extra: Pair<String, String>) = buildJsonObject {
+                catalog.getValue(type to id).forEach { (k, v) -> put(k, v) }
+                put("media_type", type); put(extra.first, extra.second)
+            }
+            val body = buildJsonObject {
+                put("id", 500); put("name", "Dee Rector"); put("biography", "Makes films."); put("known_for_department", "Directing")
+                putJsonObject("combined_credits") {
+                    putJsonArray("crew") {
+                        add(credit("movie", 3, "job" to "Director")); add(credit("movie", 28, "job" to "Director"))
+                        add(credit("movie", 9, "job" to "Producer"))
+                    }
+                    putJsonArray("cast") {
+                        add(credit("movie", 13, "character" to "Hero")); add(credit("tv", 101, "character" to "Self - Guest"))
+                    }
+                }
+            }
+            return respond(req, 200, body.toString())
         }
         if (path == "/configuration") return respond(req, 200, """{"images":{}}""")
         if (path == "/search/multi") {

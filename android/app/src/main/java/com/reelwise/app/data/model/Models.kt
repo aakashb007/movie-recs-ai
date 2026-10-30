@@ -166,6 +166,46 @@ data class CastMember(
     val name: String,
     val character: String = "",
     @SerialName("profile_path") val profilePath: String? = null,
+    /** TMDB person id; opens their filmography. */
+    val id: Int? = null,
+)
+
+/** A director (films) or creator (series). */
+@Serializable
+data class CrewMember(
+    val id: Int,
+    val name: String,
+    val job: String,
+    @SerialName("profile_path") val profilePath: String? = null,
+)
+
+/** One line of a filmography: the title and what the person did on it. */
+@Serializable
+data class PersonCredit(
+    val title: TitleSummary,
+    /** "Director", "Creator", or the character played; empty when unknown. */
+    val role: String,
+    val kind: CreditKind,
+)
+
+@Serializable
+enum class CreditKind { @SerialName("directed") DIRECTED, @SerialName("created") CREATED, @SerialName("acted") ACTED }
+
+@Serializable
+data class PersonDetail(
+    val id: Int,
+    val name: String,
+    val biography: String = "",
+    val birthday: String? = null,
+    val deathday: String? = null,
+    @SerialName("place_of_birth") val placeOfBirth: String? = null,
+    @SerialName("profile_path") val profilePath: String? = null,
+    /** "Acting", "Directing", "Writing"… */
+    val department: String = "",
+    /** Their most widely seen titles, best known first. */
+    @SerialName("known_for") val knownFor: List<TitleSummary> = emptyList(),
+    /** Every credit, newest first; a title can appear once per kind. */
+    val credits: List<PersonCredit> = emptyList(),
 )
 
 @Serializable
@@ -176,6 +216,8 @@ data class TitleDetail(
     val seasons: Int? = null,
     val status: String = "",
     val cast: List<CastMember> = emptyList(),
+    /** Directors for films, creators (and any episode directors) for series. */
+    val crew: List<CrewMember> = emptyList(),
     @SerialName("trailer_youtube_key") val trailerYoutubeKey: String? = null,
     val providers: Providers = Providers(),
     val similar: List<TitleSummary> = emptyList(),

@@ -34,6 +34,8 @@ import com.reelwise.app.ui.radial.titleOptions
 import com.reelwise.app.ui.home.HomeUiState
 import com.reelwise.app.ui.home.buildSections
 import com.reelwise.app.ui.keys.KeysContent
+import com.reelwise.app.ui.person.PersonContent
+import com.reelwise.app.ui.person.PersonUiState
 import com.reelwise.app.ui.keys.KeysUiState
 import com.reelwise.app.ui.onboarding.GenreChoice
 import com.reelwise.app.ui.onboarding.QuizActions
@@ -146,6 +148,23 @@ class ScreenshotTest {
     }
 
     @Test
+    fun person() = shoot("person") {
+        PersonContent(
+            PersonUiState(
+                loading = false,
+                person = com.reelwise.app.data.model.PersonDetail(
+                    id = 500, name = "Dee Rector", department = "Directing", birthday = "1970-01-01", placeOfBirth = "Lahore, Pakistan",
+                    biography = "A director known for patient, character-driven films. ".repeat(4),
+                    knownFor = (20..25).map { title(it) },
+                    credits = (20..27).map { com.reelwise.app.data.model.PersonCredit(title(it), if (it % 3 == 0) "Hero" else "Director", if (it % 3 == 0) com.reelwise.app.data.model.CreditKind.ACTED else com.reelwise.app.data.model.CreditKind.DIRECTED) },
+                ),
+                rated = setOf(title(22).key),
+            ),
+            {}, {}, {},
+        )
+    }
+
+    @Test
     fun keys() = shoot("keys") {
         KeysContent(KeysUiState(tmdbKey = "abcdef123456"), {}, {}, {}, null, {})
     }
@@ -179,7 +198,8 @@ class ScreenshotTest {
                     tagline = "Some journeys change everything.",
                     runtime = 148,
                     trailerYoutubeKey = "abc",
-                    cast = listOf(CastMember("Ada Actor", "Lead"), CastMember("Ben Bitpart", "Friend")),
+                    cast = listOf(CastMember("Ada Actor", "Lead", id = 600), CastMember("Ben Bitpart", "Friend", id = 601)),
+                    crew = listOf(com.reelwise.app.data.model.CrewMember(500, "Dee Rector", "Director")),
                     providers = Providers(stream = listOf(Provider("StreamCo")), rent = listOf(Provider("RentIt"), Provider("Shop"))),
                     similar = (10..14).map { title(it) },
                 ),

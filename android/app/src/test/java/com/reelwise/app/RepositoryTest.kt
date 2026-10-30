@@ -155,5 +155,7 @@ class RepositoryTest {
         override suspend fun title(type: String, id: Int, region: String) = TitleDetail(summary = title(id))
 
         override suspend fun search(query: String): List<TitleSummary> = emptyList()
+
+        override suspend fun person(id: Int) = com.reelwise.app.data.model.PersonDetail(id, "Person $id")
     }
 }

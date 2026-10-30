@@ -95,6 +95,9 @@ class FakeRepository : Repository {
     override suspend fun detail(mediaType: MediaType, id: Int): Result<TitleDetail> =
         Result.success(TitleDetail(summary = title(id, mediaType)))
 
+    override suspend fun person(id: Int): Result<com.reelwise.app.data.model.PersonDetail> =
+        Result.success(com.reelwise.app.data.model.PersonDetail(id, "Person $id"))
+
     override suspend fun rate(title: TitleSummary, signal: Signal?) {
         val others = interactionsFlow.value.filterNot { it.id == title.id && it.mediaType == title.mediaType }
         interactionsFlow.value = if (signal == null) others else others + InteractionEntity(

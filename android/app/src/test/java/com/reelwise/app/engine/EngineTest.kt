@@ -1,6 +1,7 @@
 package com.reelwise.app.engine
 
 import com.reelwise.app.data.model.AskRequest
+import com.reelwise.app.data.model.CreditKind
 import com.reelwise.app.data.model.Freshness
 import com.reelwise.app.data.model.Interaction
 import com.reelwise.app.data.model.MediaType
@@ -231,5 +232,22 @@ class EngineTest {
         assertEquals("88%", withKey.imdb!!.rottenTomatoes)
         assertEquals("tt0000008", withKey.imdbId)
         assertNull(api(FakeServices()).title("movie", 8, "US").imdb)
+    }
+
+    @Test
+    fun `titles name their director or creator, and a person page lists their work`() = runBlocking {
+        val api = api(FakeServices())
+        val film = api.title("movie", 7, "US")
+        assertEquals(listOf("Dee Rector" to "Director"), film.crew.map { it.name to it.job }) // the producer is left out
+        assertEquals(600, film.cast.single().id)
+        assertEquals("Creator", api.title("tv", 102, "US").crew.first().job)
+
+        val person = api.person(500)
+        assertEquals("Dee Rector", person.name)
+        assertEquals("Directing", person.department)
+        // Directed films and acting roles, newest first; producing credits and "Self" appearances are dropped.
+        assertEquals(listOf(28 to CreditKind.DIRECTED, 13 to CreditKind.ACTED, 3 to CreditKind.DIRECTED), person.credits.map { it.title.id to it.kind })
+        assertEquals("Hero", person.credits[1].role)
+        assertEquals(listOf(28, 13, 3), person.knownFor.map { it.id }) // most voted first
     }
 }

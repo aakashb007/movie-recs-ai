@@ -78,6 +78,7 @@ import com.reelwise.app.ui.home.BrowseRoute
 import com.reelwise.app.ui.home.HomeRoute
 import com.reelwise.app.ui.keys.KeysRoute
 import com.reelwise.app.ui.onboarding.QuizRoute
+import com.reelwise.app.ui.person.PersonRoute
 import com.reelwise.app.ui.profile.ProfileRoute
 import com.reelwise.app.ui.radial.LocalRadialMenu
 import com.reelwise.app.ui.radial.RadialMenuHost
@@ -175,7 +176,17 @@ fun ReelwiseNavHost(start: Start, navController: NavHostController = rememberNav
                 popEnterTransition = { fadeIn(tween(220)) },
                 popExitTransition = { slideOutHorizontally(tween(260)) { it / 4 } + fadeOut(tween(260)) },
             ) {
-                DetailRoute(onBack = { navController.popBackStack() }, onOpenTitle = openTitle)
+                DetailRoute(
+                    onBack = { navController.popBackStack() },
+                    onOpenTitle = openTitle,
+                    onOpenPerson = { navController.navigate(Dest.Person(it)) },
+                )
+            }
+            composable<Dest.Person>(
+                enterTransition = { slideInHorizontally(tween(320)) { it / 4 } + fadeIn(tween(320)) },
+                popExitTransition = { slideOutHorizontally(tween(260)) { it / 4 } + fadeOut(tween(260)) },
+            ) {
+                PersonRoute(onBack = { navController.popBackStack() }, onOpenTitle = openTitle)
             }
         }
 

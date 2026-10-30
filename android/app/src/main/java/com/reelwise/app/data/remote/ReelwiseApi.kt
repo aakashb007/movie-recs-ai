@@ -3,6 +3,7 @@ package com.reelwise.app.data.remote
 import com.reelwise.app.data.model.AskRequest
 import com.reelwise.app.data.model.AskResponse
 import com.reelwise.app.data.model.OnboardingResponse
+import com.reelwise.app.data.model.PersonDetail
 import com.reelwise.app.data.model.RecommendationRequest
 import com.reelwise.app.data.model.RecommendationResponse
 import com.reelwise.app.data.model.TitleDetail
@@ -22,4 +23,6 @@ interface ReelwiseApi {
     suspend fun title(type: String, id: Int, region: String): TitleDetail
 
     suspend fun search(query: String): List<TitleSummary>
+
+    suspend fun person(id: Int): PersonDetail
 }

@@ -12,6 +12,7 @@ object Dest {
     @Serializable data object Watchlist
     @Serializable data object Profile
     @Serializable data class Detail(val type: String, val id: Int)
+    @Serializable data class Person(val id: Int)
 }
 
 enum class Start { KEYS, QUIZ, HOME }

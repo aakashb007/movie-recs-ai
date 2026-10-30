@@ -1,6 +1,10 @@
 package com.reelwise.app.engine
 
 import com.reelwise.app.data.model.CastMember
+import com.reelwise.app.data.model.CreditKind
+import com.reelwise.app.data.model.CrewMember
+import com.reelwise.app.data.model.PersonCredit
+import com.reelwise.app.data.model.PersonDetail
 import com.reelwise.app.data.model.MediaType
 import com.reelwise.app.data.model.Provider
 import com.reelwise.app.data.model.Providers
@@ -141,10 +145,11 @@ class TmdbClient(
             runtime = runtime?.takeIf { it > 0 },
             seasons = raw.int("number_of_seasons"),
             status = raw.str("status").orEmpty(),
-            cast = raw.obj("credits")?.arr("cast").orEmpty().take(10).mapNotNull { c ->
+            cast = raw.obj("credits")?.arr("cast").orEmpty().take(15).mapNotNull { c ->
                 val o = c as? JsonObject ?: return@mapNotNull null
-                CastMember(o.str("name") ?: return@mapNotNull null, o.str("character").orEmpty(), o.str("profile_path"))
+                CastMember(o.str("name") ?: return@mapNotNull null, o.str("character").orEmpty(), o.str("profile_path"), o.int("id"))
             },
+            crew = crewOf(raw, type),
             trailerYoutubeKey = trailer,
             providers = Providers(
                 link = regional?.str("link"),
@@ -156,6 +161,68 @@ class TmdbClient(
             similar = raw.obj("recommendations")?.arr("results").orEmpty().take(12)
                 .mapNotNull { (it as? JsonObject)?.let { o -> summary(o, type) } },
             imdbId = imdbIdOf(raw),
+        )
+    }
+
+    private fun crewOf(raw: JsonObject, type: MediaType): List<CrewMember> {
+        val creators = if (type == MediaType.TV) {
+            raw.arr("created_by").orEmpty().mapNotNull { c ->
+                val o = c as? JsonObject ?: return@mapNotNull null
+                CrewMember(o.int("id") ?: return@mapNotNull null, o.str("name") ?: return@mapNotNull null, "Creator", o.str("profile_path"))
+            }
+        } else {
+            emptyList()
+        }
+        val directors = raw.obj("credits")?.arr("crew").orEmpty().mapNotNull { c ->
+            val o = c as? JsonObject ?: return@mapNotNull null
+            if (o.str("job") != "Director") return@mapNotNull null
+            CrewMember(o.int("id") ?: return@mapNotNull null, o.str("name") ?: return@mapNotNull null, "Director", o.str("profile_path"))
+        }
+        return (creators + directors).distinctBy { it.id }.take(6)
+    }
+
+    /** A person's details and every film and series they acted in, directed or created. */
+    suspend fun person(id: Int): PersonDetail {
+        val raw = get("/person/$id", mapOf("append_to_response" to "combined_credits"))
+        val credits = raw.obj("combined_credits")
+        fun parse(list: JsonArray?, fromCast: Boolean): List<PersonCredit> = list.orEmpty().mapNotNull { c ->
+            val o = c as? JsonObject ?: return@mapNotNull null
+            val type = when (o.str("media_type")) {
+                "movie" -> MediaType.MOVIE
+                "tv" -> MediaType.TV
+                else -> return@mapNotNull null
+            }
+            val title = summary(o, type) ?: return@mapNotNull null
+            if (fromCast) {
+                // Talk shows and award ceremonies where they appear as themselves are noise in a filmography.
+                val character = o.str("character").orEmpty()
+                if (character.contains("Self", ignoreCase = true) || character.contains("Himself") || character.contains("Herself")) return@mapNotNull null
+                PersonCredit(title, character, CreditKind.ACTED)
+            } else {
+                when (o.str("job")) {
+                    "Director" -> PersonCredit(title, "Director", CreditKind.DIRECTED)
+                    "Creator" -> PersonCredit(title, "Creator", CreditKind.CREATED)
+                    else -> null // producers, writers, crew: not what a filmography here is for
+                }
+            }
+        }
+        val all = (parse(credits?.arr("crew"), fromCast = false) + parse(credits?.arr("cast"), fromCast = true))
+            .distinctBy { it.title.key to it.kind }
+        val knownFor = all.map { it.title }.distinctBy { it.key }
+            .filter { it.posterPath != null }
+            .sortedByDescending { it.voteCount }
+            .take(12)
+        return PersonDetail(
+            id = id,
+            name = raw.str("name") ?: throw TmdbException("Unusable person", 500),
+            biography = raw.str("biography").orEmpty(),
+            birthday = raw.str("birthday"),
+            deathday = raw.str("deathday"),
+            placeOfBirth = raw.str("place_of_birth"),
+            profilePath = raw.str("profile_path"),
+            department = raw.str("known_for_department").orEmpty(),
+            knownFor = knownFor,
+            credits = all.sortedWith(compareByDescending<PersonCredit> { it.title.year ?: Int.MAX_VALUE }.thenByDescending { it.title.voteCount }),
         )
     }
 

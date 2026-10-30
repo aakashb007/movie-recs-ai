@@ -13,6 +13,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.reelwise.app.data.model.AskResponse
+import com.reelwise.app.data.model.CastMember
+import com.reelwise.app.data.model.CreditKind
+import com.reelwise.app.data.model.CrewMember
+import com.reelwise.app.data.model.PersonCredit
+import com.reelwise.app.data.model.PersonDetail
+import com.reelwise.app.ui.person.PersonContent
+import com.reelwise.app.ui.person.PersonUiState
 import com.reelwise.app.data.model.MediaType
 import com.reelwise.app.data.model.Providers
 import com.reelwise.app.data.model.QueryIntent
@@ -238,6 +245,53 @@ class ScreensUiTest {
             listOf("Parasite"),
         )
         assertEquals(listOf("Movies", "Comedy", "No Horror", "Like Parasite", "heist", "1990–1999", "Rated 7.0+", "Language: KO"), chips)
+    }
+
+    @Test
+    fun directorAndCastOpenTheirFilmography() {
+        val detail = TitleDetail(
+            summary = title(4),
+            crew = listOf(CrewMember(500, "Dee Rector", "Director")),
+            cast = listOf(CastMember("Ada Actor", "Lead", id = 600)),
+        )
+        val opened = mutableListOf<Int>()
+        compose.setContent {
+            ReelwiseTheme {
+                DetailContent(
+                    state = DetailUiState(loading = false, detail = detail),
+                    onBack = {}, onSignal = {}, onToggleWatchlist = {}, onOpenTitle = {}, onRetry = {}, onOpenUrl = {},
+                    onOpenPerson = { opened += it },
+                )
+            }
+        }
+        compose.onNodeWithText("Directed by").assertExists()
+        compose.onNodeWithText("Dee Rector").performClick()
+        compose.onNodeWithText("Ada Actor").performClick()
+        assertEquals(listOf(500, 600), opened)
+    }
+
+    @Test
+    fun personPageListsTheirWorkAndFiltersByKind() {
+        val person = PersonDetail(
+            id = 500, name = "Dee Rector", department = "Directing", biography = "Makes films.",
+            knownFor = listOf(title(28), title(3)),
+            credits = listOf(
+                PersonCredit(title(28), "Director", CreditKind.DIRECTED),
+                PersonCredit(title(13), "Hero", CreditKind.ACTED),
+                PersonCredit(title(3), "Director", CreditKind.DIRECTED),
+            ),
+        )
+        var opened: TitleSummary? = null
+        compose.setContent {
+            ReelwiseTheme {
+                PersonContent(PersonUiState(loading = false, person = person, rated = setOf(title(3).key)), {}, { opened = it }, {})
+            }
+        }
+        compose.onNodeWithText("Filmography · 3").assertExists()
+        compose.onNodeWithText("Acted").performClick()
+        compose.onNodeWithText("as Hero", substring = true).assertExists()
+        compose.onNodeWithText("Title 13").performClick()
+        assertEquals(13, opened?.id)
     }
 
     @Test
