@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -81,7 +82,7 @@ class SyncManager @Inject constructor(
         import(merged)
         drive.upload(grant.token, id, json.encodeToString(BackupData.serializer(), merged.copy(exportedAt = clock.now())))
         settings.setLastSynced(clock.now())
-        restored.value = remote?.settings?.onboardingDone == true && merged.settings == remote.settings
+        setRestored(remote?.settings?.onboardingDone == true && merged.settings == remote.settings)
         message.value = if (remote == null) "Backed up to Google Drive" else "Restored and synced with Google Drive"
     }
 
@@ -100,13 +101,17 @@ class SyncManager @Inject constructor(
 
     suspend fun signOut() {
         settings.clearAccount()
-        restored.value = false
+        setRestored(false)
         message.value = "Signed out. Your data stays on this phone and in your Drive."
     }
 
     /** The restore has been acted on (the quiz was skipped); don't act on it again. */
-    fun acknowledgeRestore() {
-        restored.value = false
+    fun acknowledgeRestore() = setRestored(false)
+
+    /** Also written straight into state so the quiz sees it even before start()'s mirror catches up. */
+    private fun setRestored(value: Boolean) {
+        restored.value = value
+        _state.update { it.copy(restoredProfile = value) }
     }
 
     fun report(error: String) {
