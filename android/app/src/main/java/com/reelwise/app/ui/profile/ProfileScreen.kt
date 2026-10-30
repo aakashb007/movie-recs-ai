@@ -64,6 +64,8 @@ import com.reelwise.app.ui.theme.Eyebrow
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.Locale
 import javax.inject.Inject
+import com.reelwise.app.data.model.LearnedTaste
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -75,14 +77,26 @@ data class ProfileUiState(
     val liked: List<TitleSummary> = emptyList(),
     val dislikedCount: Int = 0,
     val seenCount: Int = 0,
+    val learned: LearnedTaste? = null,
 )
 
 private fun InteractionEntity.toSummary() = TitleSummary(id = id, mediaType = mediaType, title = title, posterPath = posterPath)
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(private val repository: Repository) : ViewModel() {
-    val state: StateFlow<ProfileUiState> = combine(repository.settings, repository.interactions) { settings, list ->
+    /** Re-learned whenever ratings, My list or the quiet signals change. */
+    private val learned = MutableStateFlow<LearnedTaste?>(null)
+
+    init {
+        viewModelScope.launch {
+            combine(repository.interactions, repository.watchlist) { a, b -> a.size + b.size }
+                .collect { learned.value = repository.learnedTaste() }
+        }
+    }
+
+    val state: StateFlow<ProfileUiState> = combine(repository.settings, repository.interactions, learned) { settings, list, taste ->
         ProfileUiState(
+            learned = taste,
             settings = settings,
             liked = list.filter { it.signal == Signal.LIKE }.sortedByDescending { it.updatedAt }.map { it.toSummary() },
             dislikedCount = list.count { it.signal == Signal.DISLIKE },
@@ -93,6 +107,11 @@ class ProfileViewModel @Inject constructor(private val repository: Repository) :
     fun setRegion(region: String) = viewModelScope.launch { repository.setRegion(region) }
     fun setThemeMode(mode: ThemeMode) = viewModelScope.launch { repository.setThemeMode(mode) }
     fun setDynamicColor(enabled: Boolean) = viewModelScope.launch { repository.setDynamicColor(enabled) }
+    fun forgetQuietSignals() = viewModelScope.launch {
+        repository.forgetQuietSignals()
+        learned.value = repository.learnedTaste()
+    }
+
     fun reset(then: () -> Unit) = viewModelScope.launch {
         repository.resetTaste()
         then()
@@ -121,6 +140,7 @@ fun ProfileRoute(
         onThemeMode = { viewModel.setThemeMode(it) },
         onApiKeys = onApiKeys,
         account = { GoogleAccountCard() },
+        onForgetQuietSignals = { viewModel.forgetQuietSignals() },
         onRetakeQuiz = onRetakeQuiz,
         onReset = { viewModel.reset(onRetakeQuiz) },
     )
@@ -137,6 +157,7 @@ fun ProfileContent(
     onThemeMode: (ThemeMode) -> Unit = {},
     onApiKeys: () -> Unit = {},
     account: @Composable () -> Unit = {},
+    onForgetQuietSignals: () -> Unit = {},
 ) {
     var confirmReset by remember { mutableStateOf(false) }
     var regionMenu by remember { mutableStateOf(false) }
@@ -168,6 +189,10 @@ fun ProfileContent(
                 }
                 Spacer(Modifier.height(16.dp))
             }
+        }
+        item {
+            LearnedTasteCard(state.learned, onForgetQuietSignals)
+            Spacer(Modifier.height(20.dp))
         }
         item {
             SectionHeader(null, "Google account")

@@ -74,7 +74,9 @@ object AppModule {
     @Provides
     @Singleton
     fun database(@ApplicationContext context: Context): ReelwiseDatabase =
-        Room.databaseBuilder(context, ReelwiseDatabase::class.java, "reelwise.db").build()
+        Room.databaseBuilder(context, ReelwiseDatabase::class.java, "reelwise.db")
+            .addMigrations(ReelwiseDatabase.MIGRATION_1_2)
+            .build()
 
     @Provides
     @Singleton

@@ -57,6 +57,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -109,6 +112,8 @@ data class HomeActions(
     val onToggleTheme: () -> Unit = {},
     val onToggleSaved: (TitleSummary) -> Unit = {},
     val onRate: (TitleSummary, Signal) -> Unit = { _, _ -> },
+    /** Swiped on from a For you card: a quiet "not this one" the taste model learns from. */
+    val onSwipedPast: (TitleSummary) -> Unit = {},
 ) {
     fun menuFor(title: TitleSummary, saved: Boolean) =
         RadialRequest(title, titleOptions(title, saved, onOpenTitle, onRate, onToggleSaved))
@@ -127,6 +132,7 @@ fun rememberHomeActions(viewModel: HomeViewModel, onOpenTitle: (TitleSummary) ->
             onToggleTheme = { viewModel.toggleTheme(dark) },
             onToggleSaved = viewModel::toggleWatchlist,
             onRate = { t, s -> viewModel.rate(t, s) },
+            onSwipedPast = viewModel::swipedPast,
         )
     }
 }
@@ -146,6 +152,14 @@ fun HomeRoute(
 @Composable
 fun ForYouContent(state: HomeUiState, actions: HomeActions) {
     val pager = rememberPagerState { state.items.size }
+    val latestItems by rememberUpdatedState(state.items)
+    LaunchedEffect(pager) {
+        var last = pager.settledPage
+        snapshotFlow { pager.settledPage }.collect { page ->
+            if (page > last) latestItems.getOrNull(last)?.let { actions.onSwipedPast(it.title) }
+            last = page
+        }
+    }
     val tints = remember { mutableStateMapOf<TitleKey, Color>() }
     val current = state.items.getOrNull(pager.currentPage)
     val background = MaterialTheme.colorScheme.background

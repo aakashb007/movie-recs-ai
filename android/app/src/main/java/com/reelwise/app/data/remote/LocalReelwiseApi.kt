@@ -24,7 +24,7 @@ class LocalReelwiseApi(
     override suspend fun onboarding() = OnboardingResponse(recommender.onboarding())
 
     override suspend fun recommendations(body: RecommendationRequest): RecommendationResponse {
-        val (items, strategy) = recommender.recommend(body.interactions, body.taste, body.mediaType, body.limit)
+        val (items, strategy) = recommender.recommend(body.interactions, body.taste, body.mediaType, body.limit, body.learned)
         return RecommendationResponse(items, strategy)
     }
 

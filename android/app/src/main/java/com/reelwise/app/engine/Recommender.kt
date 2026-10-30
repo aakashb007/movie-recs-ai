@@ -2,6 +2,7 @@ package com.reelwise.app.engine
 
 import com.reelwise.app.data.model.Freshness
 import com.reelwise.app.data.model.Interaction
+import com.reelwise.app.data.model.LearnedTaste
 import com.reelwise.app.data.model.MediaType
 import com.reelwise.app.data.model.Mix
 import com.reelwise.app.data.model.QueryIntent
@@ -57,6 +58,7 @@ class Recommender(
         taste: TasteProfile,
         filter: String,
         limit: Int,
+        learned: LearnedTaste? = null,
     ): Pair<List<RecItem>, String> = coroutineScope {
         val latest = LinkedHashMap<TitleKey, Interaction>()
         for (i in interactions) { // a later signal on the same title wins
@@ -82,7 +84,7 @@ class Recommender(
         val watchedOnly = likes.isEmpty()
 
         if (seeds.isEmpty() && taste.lovedGenres.isEmpty()) {
-            val items = coldStart(excluded, kinds, shelfTaste, mode, rankSize)
+            val items = coldStart(excluded, kinds, shelfTaste, mode, rankSize, learned)
             return@coroutineScope applyRating(items, taste.minRating, limit) to "cold_start"
         }
 
@@ -112,7 +114,7 @@ class Recommender(
         val pool = candidates.filter { (k, c) ->
             k !in excluded && k.mediaType in kinds && passes(c.title, shelfTaste) && fits(c.title, mode)
         }.values.toList()
-        val ranked = rank(pool, liked, disliked, shelfTaste, rankSize, watchedOnly = watchedOnly)
+        val ranked = rank(pool, liked, disliked, shelfTaste, rankSize, watchedOnly = watchedOnly, learned = learned)
         applyRating(ranked, taste.minRating, limit) to "personalized"
     }
 
@@ -122,6 +124,7 @@ class Recommender(
         taste: TasteProfile,
         mode: Mode,
         limit: Int,
+        learned: LearnedTaste?,
     ): List<RecItem> = coroutineScope {
         val pool = LinkedHashMap<TitleKey, Candidate>()
         if (mode == Mode.NONE) {
@@ -134,7 +137,7 @@ class Recommender(
                 .forEach { (t, label) -> pool.getOrPut(t.key) { Candidate(t, facets = listOf(label)) } }
         }
         val usable = pool.filter { (k, c) -> k !in excluded && passes(c.title, taste) && fits(c.title, mode) }.values.toList()
-        rank(usable, emptyList(), emptyList(), taste, limit)
+        rank(usable, emptyList(), emptyList(), taste, limit, learned = learned)
     }
 
     /** Titles from the person's loved genres, inside their freshness and language choices. */
@@ -264,6 +267,7 @@ class Recommender(
         queryText: String? = null,
         queryWeight: Double = 0.0,
         watchedOnly: Boolean = false,
+        learned: LearnedTaste? = null,
     ): List<RecItem> {
         if (pool.isEmpty()) return emptyList()
         val texts = pool.map { textOf(it.title) } + liked.map(::textOf) + disliked.map(::textOf) + listOfNotNull(queryText)
@@ -299,12 +303,17 @@ class Recommender(
                 else -> 0.0
             }
             var s = W_CONTENT * tasteSim + W_VOTES * votes + W_GENRE * genre + W_QUALITY * quality(t) + W_RECENCY * recency + mix
+            if (learned != null) {
+                // What the person's own actions taught the app, and less of what they keep swiping past.
+                s += W_LEARNED * TasteLearner.affinity(t, learned)
+                if (TasteLearner.key(t.mediaType, t.id) in learned.tired) s -= TIRED_PENALTY
+            }
             if (queryText != null) s = (1 - queryWeight) * s + queryWeight * TextVectors.dot(cand[i], vecs.last())
             s
         }
         val order = score.indices.sortedByDescending { score[it] }.take(maxOf(limit * 3, 30))
         val picked = mmr(order, DoubleArray(order.size) { score[order[it]] }, cand, limit, lam = 0.75)
-        return picked.map { explain(pool[it], score[it], cand[it], liked, likedV, taste, watchedOnly) }
+        return picked.map { explain(pool[it], score[it], cand[it], liked, likedV, taste, watchedOnly, learned) }
     }
 
     /** Every reason points at a real title the person rated, or at the genre or request facets it matched. */
@@ -316,6 +325,7 @@ class Recommender(
         likedV: Array<FloatArray>,
         taste: TasteProfile,
         watchedOnly: Boolean,
+        learned: LearnedTaste?,
     ): RecItem {
         val sims = DoubleArray(liked.size) { TextVectors.dot(likedV[it], vec) }
         val byKey = liked.withIndex().associate { (i, t) -> t.key to i }
@@ -333,6 +343,8 @@ class Recommender(
                 (if (shared.isNotEmpty()) " · " + shared.joinToString(" & ") else "")
         } else if (lovedGenre != null && c.facets.isEmpty()) {
             reason = "Matches your love of $lovedGenre"
+        } else if (c.facets.isEmpty() && learned != null && learnedGenre(c.title, learned) != null) {
+            reason = "You keep going for ${learnedGenre(c.title, learned)}"
         } else {
             reason = c.facets.joinToString(" · ").ifEmpty { "Highly rated and trending" }
         }
@@ -447,6 +459,14 @@ class Recommender(
         const val W_GENRE = 0.15
         const val W_QUALITY = 0.10
         const val W_RECENCY = 0.10
+
+        /** Added on top of the blend: the learned affinity in [-1, 1] moves a title by up to ±0.2. */
+        const val W_LEARNED = 0.20
+        const val TIRED_PENALTY = 0.15
+
+        /** The title's genre the person has shown the strongest liking for, if clearly positive. */
+        fun learnedGenre(t: TitleSummary, learned: LearnedTaste): String? =
+            t.genres.filter { (learned.genres[it] ?: 0.0) >= 0.3 }.maxByOrNull { learned.genres.getValue(it) }
 
         /** Bayesian-averaged rating in [0, 1] so a 9.0 from 12 votes does not beat an 8.4 from 20,000. */
         fun quality(t: TitleSummary): Double {

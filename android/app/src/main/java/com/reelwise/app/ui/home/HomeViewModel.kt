@@ -154,6 +154,13 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { repository.setThemeMode(if (currentlyDark) ThemeMode.LIGHT else ThemeMode.DARK) }
     }
 
+    /** A card swiped past without any reaction teaches the taste model a little. */
+    fun swipedPast(title: TitleSummary) {
+        val current = state.value
+        if (title.key in current.saved) return
+        viewModelScope.launch { repository.noteSkipped(title) }
+    }
+
     fun setFilter(value: FeedFilter) {
         filter.value = value
     }

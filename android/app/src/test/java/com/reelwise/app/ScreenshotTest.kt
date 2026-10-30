@@ -28,6 +28,8 @@ import com.reelwise.app.ui.home.BrowseContent
 import com.reelwise.app.ui.home.ForYouContent
 import com.reelwise.app.ui.home.HomeActions
 import com.reelwise.app.data.local.GoogleAccount
+import com.reelwise.app.data.model.LearnedTaste
+import com.reelwise.app.ui.profile.LearnedTasteCard
 import com.reelwise.app.data.sync.SyncState
 import com.reelwise.app.ui.account.GoogleAccountContent
 import com.reelwise.app.ui.radial.RadialMenuHost
@@ -164,6 +166,20 @@ class ScreenshotTest {
                 rated = setOf(title(22).key),
             ),
             {}, {}, {},
+        )
+    }
+
+    @Test
+    fun learnedTaste() = shoot("learned-taste") {
+        LearnedTasteCard(
+            LearnedTaste(
+                genres = mapOf("Crime" to 0.62, "Mystery" to 0.41, "Drama" to 0.2, "Horror" to -0.55, "Romance" to -0.18),
+                languages = mapOf("ko" to 0.35, "en" to 0.1),
+                decades = mapOf(2010 to 0.33),
+                types = mapOf(MediaType.TV to 0.5, MediaType.MOVIE to 0.1),
+                evidence = 37,
+            ),
+            onForgetQuietSignals = {},
         )
     }
 

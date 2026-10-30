@@ -57,7 +57,10 @@ class DetailViewModel @Inject constructor(
         load.value = Load()
         viewModelScope.launch {
             repository.detail(mediaType, route.id)
-                .onSuccess { load.value = Load(loading = false, detail = it) }
+                .onSuccess {
+                    load.value = Load(loading = false, detail = it)
+                    repository.noteOpened(it.summary)
+                }
                 .onFailure { load.value = Load(loading = false, error = it.userMessage()) }
         }
     }

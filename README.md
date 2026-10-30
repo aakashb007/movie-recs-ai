@@ -102,6 +102,11 @@ branch for a direct download.
 - **Feel-good** and **Classics** chips: uplifting comedy/family/animation/romance (never horror or thrillers),
   or films from before 2000 including cult favourites, still ranked by your taste.
 - **Minimum rating** (quiz): IMDb when you add a free OMDb key (Profile → API keys), otherwise TMDB.
+- **Learns from you:** every rating, My list add, opened details page and swiped-past card is evidence
+  for or against a title's genres, language, decade and film-vs-series. Recent activity counts more
+  (half-life 120 days) and one-off reactions are shrunk towards neutral, so a single rating doesn't
+  swing the feed. The result moves each pick by up to ±0.2 on top of the content and "fans also liked"
+  scores, pushes down titles you keep swiping past, and is shown in Profile → **What Reelwise has learned**.
 - **Ask:** type a mood or a comparison. The app shows how it read your request
   (genres, exclusions, decade, "Like Dark") so a wrong reading is visible.
 - **Details:** where to watch in your region (stream/free/rent/buy), trailer, cast, more like this.

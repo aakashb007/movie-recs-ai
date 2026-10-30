@@ -105,6 +105,24 @@ data class RecommendationRequest(
     val region: String,
     val limit: Int = 60,
     val taste: TasteProfile = TasteProfile(),
+    /** What the app has learned from everything the person did; null before there is any evidence. */
+    val learned: LearnedTaste? = null,
+)
+
+/**
+ * Affinities in [-1, 1] learned from ratings, My list, opened and swiped-past titles, with old
+ * evidence fading. Keys: TMDB genre names, ISO language codes, decades (1990), and media types.
+ */
+@Serializable
+data class LearnedTaste(
+    val genres: Map<String, Double> = emptyMap(),
+    val languages: Map<String, Double> = emptyMap(),
+    val decades: Map<Int, Double> = emptyMap(),
+    val types: Map<MediaType, Double> = emptyMap(),
+    /** "movie:123" keys swiped past repeatedly without any reaction: shown less often. */
+    val tired: Set<String> = emptySet(),
+    /** How many titles the model learned from. */
+    val evidence: Int = 0,
 )
 
 @Serializable
