@@ -100,6 +100,14 @@ class TasteLearnerTest {
     }
 
     @Test
+    fun moreLikeThisIsTheStrongestPositive() {
+        fun drama(weight: Double) = TasteLearner.learn(listOf(Evidence(f(1, "Drama"), weight, now)), emptyMap(), emptySet(), now)
+            .genres.getValue("Drama")
+        assertTrue(drama(TasteLearner.MORE) > drama(TasteLearner.LIKE))
+        assertTrue(drama(TasteLearner.LIKE) > drama(TasteLearner.WATCHLIST))
+    }
+
+    @Test
     fun titlesSwipedPastRepeatedlyAreTiredUnlessActedOn() {
         val learned = TasteLearner.learn(emptyList(), mapOf("movie:1" to 2, "movie:2" to 1, "movie:3" to 3), setOf("movie:3"), now)
         assertEquals(setOf("movie:1"), learned.tired)

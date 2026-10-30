@@ -98,7 +98,7 @@ class ProfileViewModel @Inject constructor(private val repository: Repository) :
         ProfileUiState(
             learned = taste,
             settings = settings,
-            liked = list.filter { it.signal == Signal.LIKE }.sortedByDescending { it.updatedAt }.map { it.toSummary() },
+            liked = list.filter { it.signal == Signal.LIKE || it.signal == Signal.MORE }.sortedByDescending { it.updatedAt }.map { it.toSummary() },
             dislikedCount = list.count { it.signal == Signal.DISLIKE },
             seenCount = list.count { it.signal == Signal.SEEN },
         )

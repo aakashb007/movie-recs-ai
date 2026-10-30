@@ -77,6 +77,17 @@ class EngineTest {
     }
 
     @Test
+    fun `more like this seeds the feed and says so`() {
+        val services = FakeServices()
+        val body = recs(api(services), listOf(like(1), like(2, signal = Signal.MORE)), limit = 10)
+        val got = ids(body.items)
+        assertTrue(got.none { it == ("movie" to 2) })
+        val fromMore = body.items.filter { it.because?.id == 2 }
+        assertTrue("picks build on the more-like-this title", fromMore.isNotEmpty())
+        fromMore.forEach { assertTrue(it.reason, it.reason.endsWith(", as you asked")) }
+    }
+
+    @Test
     fun `watched-only history still personalises, and says so`() {
         val body = recs(api(FakeServices()), listOf(like(2, signal = Signal.SEEN), like(7, signal = Signal.SEEN)))
         assertEquals("personalized", body.strategy)

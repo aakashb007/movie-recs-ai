@@ -120,11 +120,11 @@ class QuizViewModel @Inject constructor(private val repository: Repository) : Vi
     /** Retaking the quiz starts from what is already known. */
     private suspend fun prefill() {
         val taste = repository.settings.first().taste
-        val known = repository.interactions.first().filter { it.signal == Signal.SEEN || it.signal == Signal.LIKE }
+        val known = repository.interactions.first().filter { it.signal == Signal.SEEN || it.signal == Signal.LIKE || it.signal == Signal.MORE }
         _state.update { s ->
             s.copy(
                 watched = known.associate { TitleKey(it.id, it.mediaType) to TitleSummary(it.id, it.mediaType, it.title, posterPath = it.posterPath) },
-                loved = known.filter { it.signal == Signal.LIKE }.map { TitleKey(it.id, it.mediaType) }.toSet(),
+                loved = known.filter { it.signal == Signal.LIKE || it.signal == Signal.MORE }.map { TitleKey(it.id, it.mediaType) }.toSet(),
                 genres = taste.lovedGenres.associateWith { GenreChoice.LOVE } + taste.avoidedGenres.associateWith { GenreChoice.AVOID },
                 freshness = if (taste == TasteProfile()) s.freshness else taste.freshness,
                 mix = taste.mix,

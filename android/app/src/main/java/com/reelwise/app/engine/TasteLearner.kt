@@ -33,6 +33,9 @@ data class Evidence(val title: TitleFeatures, val weight: Double, val at: Long, 
  * so one rating doesn't swing the feed.
  */
 object TasteLearner {
+    /** Seen it, and wants more titles like it. */
+    const val MORE = 1.5
+
     /** Loved it. */
     const val LIKE = 1.0
 

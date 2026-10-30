@@ -67,7 +67,9 @@ class Recommender(
             latest[key] = i
         }
         val excluded = latest.keys.toSet()
-        val likes = latest.values.filter { it.signal == Signal.LIKE }
+        // "More like this" titles are loved titles the person asked to build on: they seed first.
+        val more = latest.values.filter { it.signal == Signal.MORE }
+        val likes = more + latest.values.filter { it.signal == Signal.LIKE }
         val seen = latest.values.filter { it.signal == Signal.SEEN }
         val dislikes = latest.values.filter { it.signal == Signal.DISLIKE }
         val kinds = kindsFor(filter)
@@ -80,7 +82,9 @@ class Recommender(
         // Rank extra candidates when a rating filter will remove some afterwards.
         val rankSize = if (taste.minRating != null) limit * 2 else limit
         // Loved titles lead; with none, titles merely watched still say a lot about taste.
-        val seeds = likes.takeLast(SEEDS).ifEmpty { seen.takeLast(SEEDS - 2) }
+        val seeds = (more.takeLast(SEEDS) + likes.filter { it.signal == Signal.LIKE }.takeLast(SEEDS))
+            .take(SEEDS)
+            .ifEmpty { seen.takeLast(SEEDS - 2) }
         val watchedOnly = likes.isEmpty()
 
         if (seeds.isEmpty() && taste.lovedGenres.isEmpty()) {
@@ -114,7 +118,8 @@ class Recommender(
         val pool = candidates.filter { (k, c) ->
             k !in excluded && k.mediaType in kinds && passes(c.title, shelfTaste) && fits(c.title, mode)
         }.values.toList()
-        val ranked = rank(pool, liked, disliked, shelfTaste, rankSize, watchedOnly = watchedOnly, learned = learned)
+        val moreKeys = more.map { TitleKey(it.id, it.mediaType) }.toSet()
+        val ranked = rank(pool, liked, disliked, shelfTaste, rankSize, watchedOnly = watchedOnly, learned = learned, moreLike = moreKeys)
         applyRating(ranked, taste.minRating, limit) to "personalized"
     }
 
@@ -268,6 +273,7 @@ class Recommender(
         queryWeight: Double = 0.0,
         watchedOnly: Boolean = false,
         learned: LearnedTaste? = null,
+        moreLike: Set<TitleKey> = emptySet(),
     ): List<RecItem> {
         if (pool.isEmpty()) return emptyList()
         val texts = pool.map { textOf(it.title) } + liked.map(::textOf) + disliked.map(::textOf) + listOfNotNull(queryText)
@@ -289,7 +295,8 @@ class Recommender(
             val c = pool[i]
             val t = c.title
             val tasteSim = if (hasProfile) TextVectors.dot(cand[i], profile) else 0.0
-            val votes = minOf(c.seedVotes.values.sum() / nSeeds, 1.0)
+            // A "more like this" seed's votes count double.
+            val votes = minOf(c.seedVotes.entries.sumOf { (k, v) -> if (k in moreLike) 2 * v else v } / nSeeds, 1.0)
             val genre = if (t.genres.any { it in Genres.displayNames(taste.lovedGenres, t.mediaType) }) 1.0 else 0.0
             val recency = when {
                 (t.year ?: 0) >= year - 1 -> 1.0
@@ -313,7 +320,7 @@ class Recommender(
         }
         val order = score.indices.sortedByDescending { score[it] }.take(maxOf(limit * 3, 30))
         val picked = mmr(order, DoubleArray(order.size) { score[order[it]] }, cand, limit, lam = 0.75)
-        return picked.map { explain(pool[it], score[it], cand[it], liked, likedV, taste, watchedOnly, learned) }
+        return picked.map { explain(pool[it], score[it], cand[it], liked, likedV, taste, watchedOnly, learned, moreLike) }
     }
 
     /** Every reason points at a real title the person rated, or at the genre or request facets it matched. */
@@ -326,6 +333,7 @@ class Recommender(
         taste: TasteProfile,
         watchedOnly: Boolean,
         learned: LearnedTaste?,
+        moreLike: Set<TitleKey>,
     ): RecItem {
         val sims = DoubleArray(liked.size) { TextVectors.dot(likedV[it], vec) }
         val byKey = liked.withIndex().associate { (i, t) -> t.key to i }
@@ -349,6 +357,7 @@ class Recommender(
             reason = c.facets.joinToString(" · ").ifEmpty { "Highly rated and trending" }
         }
         if (c.facets.isNotEmpty() && because != null) reason = c.facets.take(2).joinToString(" · ") + " · like ${because.title}"
+        if (because != null && because.key in moreLike) reason = "More like ${because.title}, as you asked"
         val ref = because?.let { TitleRef(it.id, it.mediaType, it.title) }
         return RecItem(title = c.title, score = Math.round(score * 10000) / 10000.0, reason = reason, because = ref)
     }
@@ -408,7 +417,7 @@ class Recommender(
         }
         for (titles in discoverLists.awaitAll()) for (t in titles) candidates.getOrPut(t.key) { Candidate(t) }
 
-        val excluded = interactions.filter { it.signal != Signal.LIKE }.map { TitleKey(it.id, it.mediaType) }.toSet() + refs.map { it.key }
+        val excluded = interactions.filter { it.signal != Signal.LIKE && it.signal != Signal.MORE }.map { TitleKey(it.id, it.mediaType) }.toSet() + refs.map { it.key }
         // An explicit request overrides freshness and language, but avoided genres stay avoided.
         val askTaste = TasteProfile(avoidedGenres = taste.avoidedGenres)
         val pool = candidates.filter { (k, c) ->
@@ -416,7 +425,7 @@ class Recommender(
         }.values.toList()
         pool.forEach { it.facets = facets(it.title, intent) }
 
-        val likedKeys = interactions.filter { it.signal == Signal.LIKE }.takeLast(SEEDS).map { TitleKey(it.id, it.mediaType) }
+        val likedKeys = interactions.filter { it.signal == Signal.LIKE || it.signal == Signal.MORE }.takeLast(SEEDS).map { TitleKey(it.id, it.mediaType) }
         val liked = refs + summaries(likedKeys)
         val queryText = (listOf(query) + intent.keywords + intent.genres + refs.map(::textOf)).joinToString(" ")
         val items = rank(pool, liked, emptyList(), TasteProfile(lovedGenres = intent.genres), limit, queryText = queryText, queryWeight = 0.5)

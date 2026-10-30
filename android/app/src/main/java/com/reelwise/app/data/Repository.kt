@@ -121,8 +121,14 @@ class DefaultRepository @Inject constructor(
     override suspend fun saveTaste(taste: TasteProfile, watched: List<TitleSummary>, loved: Set<TitleKey>) {
         // Loved titles get the latest timestamps, so they lead the "because you loved" seeds.
         val start = clock.now()
+        // Retaking the quiz keeps "more like this": the quiz only knows loved or watched.
+        val more = db.interactions().getAll().filter { it.signal == Signal.MORE }.map { TitleKey(it.id, it.mediaType) }.toSet()
         watched.sortedBy { it.key in loved }.forEachIndexed { i, title ->
-            val signal = if (title.key in loved) Signal.LIKE else Signal.SEEN
+            val signal = when (title.key) {
+                in more -> if (title.key in loved) Signal.MORE else Signal.SEEN
+                in loved -> Signal.LIKE
+                else -> Signal.SEEN
+            }
             db.interactions().upsert(InteractionEntity(title.id, title.mediaType, signal, title.title, title.posterPath, start + i))
             remember(title)
         }
@@ -244,6 +250,7 @@ class DefaultRepository @Inject constructor(
         for (i in db.interactions().getAll()) {
             acted += TasteLearner.key(i.mediaType, i.id)
             val weight = when (i.signal) {
+                Signal.MORE -> TasteLearner.MORE
                 Signal.LIKE -> TasteLearner.LIKE
                 Signal.SEEN -> TasteLearner.SEEN
                 Signal.DISMISS -> TasteLearner.NOT_INTERESTED

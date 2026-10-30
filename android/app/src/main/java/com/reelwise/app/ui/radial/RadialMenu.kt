@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.BookmarkAdd
@@ -109,6 +110,7 @@ fun titleOptions(
 ): List<RadialOption> = listOf(
     RadialOption("Details", Icons.Rounded.Info, { onOpen(title) }),
     RadialOption("Loved it", Icons.Rounded.Favorite, { onRate(title, Signal.LIKE) }),
+    RadialOption("More like this", Icons.Rounded.AutoAwesome, { onRate(title, Signal.MORE) }),
     RadialOption(if (saved) "On my list" else "My list", if (saved) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkAdd, { onToggleSaved(title) }, active = saved),
     RadialOption("Seen it", Icons.Rounded.Visibility, { onRate(title, Signal.SEEN) }),
     RadialOption("Not for me", Icons.Rounded.ThumbDown, { onRate(title, Signal.DISLIKE) }),

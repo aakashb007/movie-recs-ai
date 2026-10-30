@@ -98,12 +98,13 @@ branch for a direct download.
 - **For you:** every pick as one big poster; swipe left and right. **Browse** has the same picks in rows
   titled by their reason ("Because you loved …"), fresh releases and series.
 - **Circle menu (frosted glass):** press and hold any poster, slide onto a petal (the phone ticks on each one) and let go:
-  Details, Loved it, My list, Seen it, Not for me, Not interested. The app behind it blurs.
+  Details, Loved it, More like this, My list, Seen it, Not for me, Not interested. The app behind it blurs.
 - **Feel-good** and **Classics** chips: uplifting comedy/family/animation/romance (never horror or thrillers),
   or films from before 2000 including cult favourites, still ranked by your taste.
 - **Minimum rating** (quiz): IMDb when you add a free OMDb key (Profile → API keys), otherwise TMDB.
 - **Learns from you:** every rating, My list add, opened details page and swiped-past card is evidence
-  for or against a title's genres, language, decade and film-vs-series: Loved it +1, My list (want to
+  for or against a title's genres, language, decade and film-vs-series: More like this +1.5 (also seeds
+  "fans also liked" first, with double votes), Loved it +1, My list (want to
   watch) +0.6, opened +0.15, Seen it +0.1 (it mostly means "don't suggest it again"), swiped past −0.1,
   Not interested −1 (aimed at the genre and type, barely at language and decade), Not for me −2. Recent activity counts more
   (half-life 120 days) and one-off reactions are shrunk towards neutral, so a single rating doesn't

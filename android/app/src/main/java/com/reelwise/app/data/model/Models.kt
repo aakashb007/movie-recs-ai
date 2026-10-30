@@ -20,6 +20,9 @@ enum class Signal {
     @SerialName("dislike") DISLIKE,
     @SerialName("seen") SEEN,
     @SerialName("dismiss") DISMISS,
+
+    /** Watched it and wants more of this kind: the strongest "this is my taste" signal. */
+    @SerialName("more") MORE,
 }
 
 /** A title is identified by its TMDB id *and* type: movie 1399 and show 1399 are different things. */
