@@ -64,6 +64,9 @@ interface WatchlistDao {
     @Query("SELECT * FROM watchlist ORDER BY addedAt DESC")
     fun observeAll(): Flow<List<WatchlistEntity>>
 
+    @Query("SELECT * FROM watchlist ORDER BY addedAt ASC")
+    suspend fun getAll(): List<WatchlistEntity>
+
     @Query("SELECT EXISTS(SELECT 1 FROM watchlist WHERE id = :id AND mediaType = :mediaType)")
     fun observeContains(id: Int, mediaType: MediaType): Flow<Boolean>
 

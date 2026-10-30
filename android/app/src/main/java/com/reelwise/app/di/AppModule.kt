@@ -13,6 +13,9 @@ import com.reelwise.app.data.Repository
 import com.reelwise.app.data.local.KeyStore
 import com.reelwise.app.data.local.ReelwiseDatabase
 import com.reelwise.app.data.remote.LocalReelwiseApi
+import com.reelwise.app.data.sync.DriveClient
+import com.reelwise.app.data.sync.DriveTokens
+import com.reelwise.app.data.sync.GoogleDriveAuth
 import com.reelwise.app.data.remote.ReelwiseApi
 import com.reelwise.app.engine.KeyProvider
 import com.reelwise.app.engine.OmdbClient
@@ -88,6 +91,10 @@ object AppModule {
 
     @Provides
     fun clock(): Clock = Clock { System.currentTimeMillis() }
+
+    @Provides
+    @Singleton
+    fun drive(client: OkHttpClient, json: Json): DriveClient = DriveClient(client, json)
 }
 
 @Module
@@ -98,4 +105,7 @@ abstract class BindingsModule {
 
     @Binds
     abstract fun keyProvider(impl: KeyStore): KeyProvider
+
+    @Binds
+    abstract fun driveTokens(impl: GoogleDriveAuth): DriveTokens
 }

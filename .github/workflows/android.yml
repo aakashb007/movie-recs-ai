@@ -30,7 +30,12 @@ jobs:
       - name: Unit, UI (Robolectric) and screenshot tests
         run: ./gradlew --no-daemon testDebugUnitTest -Proborazzi.test.record=true
       - name: Build debug and release APKs
-        run: ./gradlew --no-daemon assembleDebug assembleRelease
+        env:
+          REELWISE_KEYSTORE_B64: ${{ secrets.REELWISE_KEYSTORE_B64 }}
+          REELWISE_KEYSTORE_PASSWORD: ${{ secrets.REELWISE_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$REELWISE_KEYSTORE_B64" ]; then echo "$REELWISE_KEYSTORE_B64" | base64 -d > app/reelwise.jks; fi
+          ./gradlew --no-daemon assembleDebug assembleRelease
       - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:

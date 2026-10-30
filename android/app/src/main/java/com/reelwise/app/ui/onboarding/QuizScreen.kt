@@ -90,6 +90,9 @@ import com.reelwise.app.data.model.FeedFilter
 import com.reelwise.app.data.model.Freshness
 import com.reelwise.app.data.model.Mix
 import com.reelwise.app.data.model.TitleSummary
+import com.reelwise.app.ui.account.AccountViewModel
+import com.reelwise.app.ui.account.GoogleButton
+import com.reelwise.app.ui.account.rememberGoogleSignIn
 import com.reelwise.app.ui.components.ArtworkImage
 import com.reelwise.app.ui.components.ErrorState
 import com.reelwise.app.ui.components.Tmdb
@@ -116,11 +119,26 @@ data class QuizActions(
     val onRetry: () -> Unit = {},
     val onRestart: () -> Unit = {},
     val onFinished: () -> Unit = {},
+    /** Restore a backup from Google Drive instead of answering; null hides the option. */
+    val onRestore: (() -> Unit)? = null,
 )
 
 @Composable
-fun QuizRoute(onFinished: () -> Unit, viewModel: QuizViewModel = hiltViewModel()) {
+fun QuizRoute(
+    onFinished: () -> Unit,
+    viewModel: QuizViewModel = hiltViewModel(),
+    account: AccountViewModel = hiltViewModel(),
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val sync by account.state.collectAsStateWithLifecycle()
+    val restore = rememberGoogleSignIn(account.auth, account::connected, account::failed)
+    // A backup that held a finished quiz means this phone is set up: go straight to the picks.
+    LaunchedEffect(sync.restoredProfile) {
+        if (sync.restoredProfile) {
+            account.acknowledgeRestore()
+            onFinished()
+        }
+    }
     QuizContent(
         state,
         QuizActions(
@@ -128,6 +146,7 @@ fun QuizRoute(onFinished: () -> Unit, viewModel: QuizViewModel = hiltViewModel()
             onToggleLoved = viewModel::toggleLoved, onCycleGenre = viewModel::cycleGenre, onFreshness = viewModel::setFreshness,
             onMix = viewModel::setMix, onLanguage = viewModel::toggleLanguage, onMinRating = viewModel::setMinRating, onGoTo = viewModel::goTo, onBack = viewModel::back,
             onNext = viewModel::next, onRetry = viewModel::loadPool, onRestart = viewModel::restart, onFinished = onFinished,
+            onRestore = restore.takeIf { sync.account == null },
         ),
     )
 }
@@ -222,6 +241,10 @@ private fun WatchedStep(state: QuizUiState, actions: QuizActions) {
                     "What have you already watched?",
                     "Tap everything you've seen and the heart on the ones you loved. Reelwise will never suggest these again.",
                 )
+                actions.onRestore?.let { restore ->
+                    Spacer(Modifier.height(12.dp))
+                    GoogleButton(busy = false, onClick = restore, label = "Restore from Google Drive")
+                }
                 Spacer(Modifier.height(14.dp))
                 OutlinedTextField(
                     value = state.query,

@@ -19,3 +19,4 @@ android/.kotlin/
 
 # Secrets
 .env
+android/app/reelwise.jks

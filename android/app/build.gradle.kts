@@ -21,13 +21,32 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // One fixed key for every build, so new APKs install over old ones and Google sign-in (which
+    // trusts this key's SHA-1) keeps working. CI writes it from the REELWISE_KEYSTORE_B64 secret;
+    // without it (a fresh clone) builds fall back to the local debug key.
+    val keystore = file("reelwise.jks")
+    val keystorePassword = System.getenv("REELWISE_KEYSTORE_PASSWORD")
+    val fixedKey = keystore.exists() && !keystorePassword.isNullOrEmpty()
+    signingConfigs {
+        if (fixedKey) {
+            create("reelwise") {
+                storeFile = keystore
+                storePassword = keystorePassword
+                keyAlias = "reelwise"
+                keyPassword = keystorePassword
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName(if (fixedKey) "reelwise" else "debug")
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Signed with the debug key so CI can produce an installable APK; use a real keystore for the Play Store.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (fixedKey) "reelwise" else "debug")
         }
     }
 
@@ -86,6 +105,8 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.coil.compose)
     implementation(libs.palette)
+    implementation(libs.play.services.auth)
+    implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.datastore.preferences)
     implementation(libs.work.runtime)
 

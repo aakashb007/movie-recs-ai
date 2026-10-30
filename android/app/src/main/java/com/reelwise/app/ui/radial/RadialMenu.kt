@@ -53,6 +53,7 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asAndroidPath
@@ -209,7 +210,7 @@ fun RadialMenuHost(state: RadialMenuState) {
     AnimatedVisibility(state.isOpen, enter = fadeIn(tween(160)), exit = fadeOut(tween(160))) {
         val request = last ?: return@AnimatedVisibility
         // Behind the menu the app is blurred (Android 12+); older phones get a darker scrim instead.
-        val scrim = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) 0.35f else 0.65f
+        val scrim = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) 0.2f else 0.55f
         Box(
             Modifier
                 .fillMaxSize()
@@ -247,27 +248,60 @@ fun RadialMenuHost(state: RadialMenuState) {
 private fun Wheel(request: RadialRequest, hovered: Int, outer: androidx.compose.ui.unit.Dp, inner: androidx.compose.ui.unit.Dp) {
     val n = request.options.size
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val ring = if (dark) Color(0xFF161616).copy(alpha = 0.88f) else Color.White.copy(alpha = 0.72f)
-    val petal = if (dark) Color(0xFF2B2B2E).copy(alpha = 0.92f) else Color(0xFFFFF4EE).copy(alpha = 0.95f)
-    val activePetal = if (dark) Color(0xFF3A1416) else Color(0xFFFFDAD7)
-    val onPetal = if (dark) Color(0xFFF5F5F1) else Color(0xFF1A1A1A)
+    // Frosted glass: low-opacity fills over the blurred app, bright hairline edges and a diagonal sheen.
+    val ring = Color.White.copy(alpha = if (dark) 0.07f else 0.22f)
+    val petal = Color.White.copy(alpha = if (dark) 0.14f else 0.38f)
+    val activePetal = BrandRed.copy(alpha = 0.28f)
+    val hoverPetal = BrandRed.copy(alpha = 0.78f)
+    val edge = Color.White.copy(alpha = if (dark) 0.35f else 0.75f)
+    val onPetal = if (dark) Color.White else Color(0xFF141414)
     val grows = List(n) { i -> animateFloatAsState(if (i == hovered) 1f else 0f, spring(Spring.DampingRatioMediumBouncy), label = "petal$i") }
     val density = LocalDensity.current
     val size = outer * 2 + 28.dp
 
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
-        // Glass ring, then petals with rounded corners and gaps between them.
         Canvas(Modifier.fillMaxSize()) {
             val c = Offset(this.size.width / 2, this.size.height / 2)
             val outerPx = outer.toPx()
             val innerPx = inner.toPx() + 6.dp.toPx()
-            drawCircle(ring, radius = outerPx + 10.dp.toPx(), center = c)
-            drawCircle(Color.White.copy(alpha = if (dark) 0.10f else 0.6f), radius = outerPx + 10.dp.toPx(), center = c, style = Stroke(1.5.dp.toPx()))
+            val ringR = outerPx + 10.dp.toPx()
+            // The glass disc behind the petals, with a light rim.
+            drawCircle(ring, radius = ringR, center = c)
+            drawCircle(
+                Brush.linearGradient(
+                    0f to Color.White.copy(alpha = if (dark) 0.16f else 0.45f),
+                    0.45f to Color.Transparent,
+                    1f to Color.White.copy(alpha = if (dark) 0.05f else 0.15f),
+                    start = Offset(c.x - ringR, c.y - ringR),
+                    end = Offset(c.x + ringR, c.y + ringR),
+                ),
+                radius = ringR,
+                center = c,
+            )
+            drawCircle(edge, radius = ringR, center = c, style = Stroke(1.2.dp.toPx()))
+
             val gap = 7.dp.toPx()
             val step = 360f / n
-            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                pathEffect = CornerPathEffect(16.dp.toPx())
+            val corner = CornerPathEffect(16.dp.toPx())
+            val fillPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                pathEffect = corner
                 style = android.graphics.Paint.Style.FILL
+            }
+            val sheenPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                pathEffect = corner
+                style = android.graphics.Paint.Style.FILL
+                shader = android.graphics.LinearGradient(
+                    c.x - outerPx, c.y - outerPx, c.x + outerPx * 0.2f, c.y + outerPx * 0.2f,
+                    Color.White.copy(alpha = if (dark) 0.22f else 0.5f).toArgb(),
+                    Color.Transparent.toArgb(),
+                    android.graphics.Shader.TileMode.CLAMP,
+                )
+            }
+            val edgePaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                pathEffect = corner
+                style = android.graphics.Paint.Style.STROKE
+                strokeWidth = 1.dp.toPx()
+                color = edge.toArgb()
             }
             for (i in 0 until n) {
                 val grow = grows[i].value
@@ -279,14 +313,17 @@ private fun Wheel(request: RadialRequest, hovered: Int, outer: androidx.compose.
                     arcTo(Rect(c, r), start + og / 2, step - og, forceMoveTo = true)
                     arcTo(Rect(c, innerPx), start + step - ig / 2, -(step - ig), forceMoveTo = false)
                     close()
-                }
-                val fill = when {
-                    i == hovered -> BrandRed
+                }.asAndroidPath()
+                fillPaint.color = when {
+                    i == hovered -> hoverPetal
                     request.options[i].active -> activePetal
                     else -> petal
+                }.toArgb()
+                drawIntoCanvas {
+                    it.nativeCanvas.drawPath(path, fillPaint)
+                    it.nativeCanvas.drawPath(path, sheenPaint)
+                    it.nativeCanvas.drawPath(path, edgePaint)
                 }
-                paint.color = fill.toArgb()
-                drawIntoCanvas { it.nativeCanvas.drawPath(path.asAndroidPath(), paint) }
             }
         }
         // Icons and labels sit in the middle of each petal.
@@ -310,6 +347,9 @@ private fun Wheel(request: RadialRequest, hovered: Int, outer: androidx.compose.
                 Text(
                     option.label,
                     color = if (selected) Color.White else onPetal,
+                    style = androidx.compose.ui.text.TextStyle(
+                        shadow = androidx.compose.ui.graphics.Shadow(Color.Black.copy(alpha = if (dark) 0.6f else 0.15f), blurRadius = 6f),
+                    ),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
@@ -324,11 +364,11 @@ private fun Wheel(request: RadialRequest, hovered: Int, outer: androidx.compose.
             Modifier
                 .size(inner * 2 - 8.dp)
                 .clip(CircleShape)
-                .border(2.dp, Color.White.copy(alpha = 0.5f), CircleShape),
+                .border(1.5.dp, Color.White.copy(alpha = 0.6f), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             ArtworkImage(Tmdb.poster(request.title.posterPath, "w185"), request.title.title, Modifier.fillMaxSize())
-            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)))
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.15f), Color.Black.copy(alpha = 0.6f)))))
             Text(
                 request.options.getOrNull(hovered)?.label ?: request.title.title,
                 color = Color.White,

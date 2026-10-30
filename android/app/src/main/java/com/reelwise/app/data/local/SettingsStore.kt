@@ -16,6 +16,9 @@ import kotlinx.serialization.json.Json
 
 enum class ThemeMode { SYSTEM, DARK, LIGHT }
 
+/** The Google account Reelwise backs up to, and when it last did. */
+data class GoogleAccount(val email: String, val name: String?, val lastSyncedAt: Long?)
+
 data class Settings(
     val region: String,
     val onboardingDone: Boolean,
@@ -40,6 +43,23 @@ class SettingsStore @Inject constructor(
         )
     }
 
+    val account: Flow<GoogleAccount?> = store.data.map { prefs ->
+        prefs[GOOGLE_EMAIL]?.let { GoogleAccount(it, prefs[GOOGLE_NAME], prefs[LAST_SYNC]) }
+    }
+
+    suspend fun setAccount(email: String, name: String?) = store.edit {
+        it[GOOGLE_EMAIL] = email
+        if (name == null) it.remove(GOOGLE_NAME) else it[GOOGLE_NAME] = name
+    }
+
+    suspend fun setLastSynced(at: Long) = store.edit { it[LAST_SYNC] = at }
+
+    suspend fun clearAccount() = store.edit {
+        it.remove(GOOGLE_EMAIL)
+        it.remove(GOOGLE_NAME)
+        it.remove(LAST_SYNC)
+    }
+
     suspend fun setRegion(region: String) = store.edit { it[REGION] = region }
     suspend fun setOnboardingDone(done: Boolean) = store.edit { it[ONBOARDING_DONE] = done }
     suspend fun setDynamicColor(enabled: Boolean) = store.edit { it[DYNAMIC_COLOR] = enabled }
@@ -52,6 +72,9 @@ class SettingsStore @Inject constructor(
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val THEME = stringPreferencesKey("theme_mode")
         val TASTE = stringPreferencesKey("taste_profile")
+        val GOOGLE_EMAIL = stringPreferencesKey("google_email")
+        val GOOGLE_NAME = stringPreferencesKey("google_name")
+        val LAST_SYNC = androidx.datastore.preferences.core.longPreferencesKey("last_synced_at")
 
         fun defaultRegion(): String =
             Locale.getDefault().country.takeIf { it.length == 2 }?.uppercase() ?: "US"

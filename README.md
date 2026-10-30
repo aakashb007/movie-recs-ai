@@ -97,7 +97,7 @@ branch for a direct download.
   review and save. Watched titles are never suggested; loved ones seed "because you loved".
 - **For you:** every pick as one big poster; swipe left and right. **Browse** has the same picks in rows
   titled by their reason ("Because you loved …"), fresh releases and series.
-- **Circle menu:** press and hold any poster, slide onto a petal (the phone ticks on each one) and let go:
+- **Circle menu (frosted glass):** press and hold any poster, slide onto a petal (the phone ticks on each one) and let go:
   Details, Loved it, My list, Seen it, Not for me, Not interested. The app behind it blurs.
 - **Feel-good** and **Classics** chips: uplifting comedy/family/animation/romance (never horror or thrillers),
   or films from before 2000 including cult favourites, still ranked by your taste.
@@ -107,7 +107,19 @@ branch for a direct download.
 - **Details:** where to watch in your region (stream/free/rent/buy), trailer, cast, more like this.
 - **Watchlist** and **Profile** (region, Material You colours, clear taste profile).
 - Works offline from the last cached feed; refreshes in the background on Wi-Fi (WorkManager).
-- Your ratings live only on the phone (Room) and are sent with each request; there are no accounts.
+- **Google sign-in (optional, Profile → Google account):** backs up ratings, watchlist and taste quiz
+  to a hidden app folder in your own Google Drive (`drive.appdata` scope; the app can't see your other
+  files) and restores them on a new phone. API keys are never backed up.
+
+### Setting up Google sign-in
+Google only lets an app sign in if it is registered in a Google Cloud project, and it checks the
+SHA-1 of the key the APK is signed with. So the APK needs one fixed signing key:
+1. Create a keystore (alias `reelwise`), then add two repository secrets: `REELWISE_KEYSTORE_B64`
+   (the file, base64-encoded) and `REELWISE_KEYSTORE_PASSWORD`. CI signs both APKs with it.
+2. Google Cloud Console → APIs & Services → enable the **Google Drive API**.
+3. OAuth consent screen: add the scope `.../auth/drive.appdata`; while in Testing, add yourself as a test user.
+4. Credentials → Create OAuth client ID → **Android**: package `com.reelwise.app` and the keystore's SHA-1
+   (`keytool -list -v -keystore reelwise.jks`).
 
 ## Data and licences
 - This product uses the TMDB API but is not endorsed or certified by TMDB.

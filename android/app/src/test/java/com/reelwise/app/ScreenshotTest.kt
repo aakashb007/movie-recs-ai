@@ -27,6 +27,9 @@ import androidx.compose.ui.geometry.Offset
 import com.reelwise.app.ui.home.BrowseContent
 import com.reelwise.app.ui.home.ForYouContent
 import com.reelwise.app.ui.home.HomeActions
+import com.reelwise.app.data.local.GoogleAccount
+import com.reelwise.app.data.sync.SyncState
+import com.reelwise.app.ui.account.GoogleAccountContent
 import com.reelwise.app.ui.radial.RadialMenuHost
 import com.reelwise.app.ui.radial.RadialMenuState
 import com.reelwise.app.ui.radial.RadialRequest
@@ -162,6 +165,16 @@ class ScreenshotTest {
             ),
             {}, {}, {},
         )
+    }
+
+    @Test
+    fun accountSignedOut() = shoot("account-signed-out") {
+        GoogleAccountContent(SyncState(), {}, {}, {})
+    }
+
+    @Test
+    fun accountSignedIn() = shoot("account-signed-in") {
+        GoogleAccountContent(SyncState(account = GoogleAccount("aakash@example.com", "Aakash Saleem", 1_700_000_000_000)), {}, {}, {})
     }
 
     @Test

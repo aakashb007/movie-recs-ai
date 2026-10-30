@@ -55,6 +55,7 @@ import com.reelwise.app.data.Repository
 import com.reelwise.app.data.local.InteractionEntity
 import com.reelwise.app.data.local.Settings
 import com.reelwise.app.data.local.ThemeMode
+import com.reelwise.app.ui.account.GoogleAccountCard
 import com.reelwise.app.data.model.Signal
 import com.reelwise.app.data.model.TitleSummary
 import com.reelwise.app.ui.components.PosterCard
@@ -119,6 +120,7 @@ fun ProfileRoute(
         onDynamicColor = { viewModel.setDynamicColor(it) },
         onThemeMode = { viewModel.setThemeMode(it) },
         onApiKeys = onApiKeys,
+        account = { GoogleAccountCard() },
         onRetakeQuiz = onRetakeQuiz,
         onReset = { viewModel.reset(onRetakeQuiz) },
     )
@@ -134,6 +136,7 @@ fun ProfileContent(
     onReset: () -> Unit,
     onThemeMode: (ThemeMode) -> Unit = {},
     onApiKeys: () -> Unit = {},
+    account: @Composable () -> Unit = {},
 ) {
     var confirmReset by remember { mutableStateOf(false) }
     var regionMenu by remember { mutableStateOf(false) }
@@ -165,6 +168,12 @@ fun ProfileContent(
                 }
                 Spacer(Modifier.height(16.dp))
             }
+        }
+        item {
+            SectionHeader(null, "Google account")
+            Spacer(Modifier.height(10.dp))
+            account()
+            Spacer(Modifier.height(20.dp))
         }
         item {
             SectionHeader(null, "Settings")
