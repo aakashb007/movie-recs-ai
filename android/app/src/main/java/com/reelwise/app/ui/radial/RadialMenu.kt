@@ -368,7 +368,7 @@ private fun Wheel(request: RadialRequest, hovered: Int, outer: androidx.compose.
             contentAlignment = Alignment.Center,
         ) {
             ArtworkImage(Tmdb.poster(request.title.posterPath, "w185"), request.title.title, Modifier.fillMaxSize())
-            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.15f), Color.Black.copy(alpha = 0.6f)))))
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.45f), Color.Black.copy(alpha = 0.7f)))))
             Text(
                 request.options.getOrNull(hovered)?.label ?: request.title.title,
                 color = Color.White,
