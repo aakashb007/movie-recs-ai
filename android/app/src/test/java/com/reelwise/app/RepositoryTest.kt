@@ -6,19 +6,27 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.reelwise.app.data.DefaultRepository
+import com.reelwise.app.data.SavedKeys
+import com.reelwise.app.data.local.KeyStore
 import com.reelwise.app.data.local.ReelwiseDatabase
 import com.reelwise.app.data.local.SettingsStore
 import com.reelwise.app.data.model.AskRequest
 import com.reelwise.app.data.model.AskResponse
 import com.reelwise.app.data.model.FeedFilter
+import com.reelwise.app.data.model.Freshness
 import com.reelwise.app.data.model.MediaType
 import com.reelwise.app.data.model.OnboardingResponse
 import com.reelwise.app.data.model.QueryIntent
 import com.reelwise.app.data.model.RecommendationRequest
 import com.reelwise.app.data.model.RecommendationResponse
 import com.reelwise.app.data.model.Signal
+import com.reelwise.app.data.model.TasteProfile
 import com.reelwise.app.data.model.TitleDetail
+import com.reelwise.app.data.model.TitleSummary
 import com.reelwise.app.data.remote.ReelwiseApi
+import com.reelwise.app.data.userMessage
+import com.reelwise.app.engine.FakeServices
+import com.reelwise.app.engine.TmdbClient
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.flow.first
@@ -26,33 +34,43 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** The data layer end to end on a real (in-memory) Room database: ratings flow into the next request. */
+/** The data layer end to end on a real (in-memory) Room database and real DataStore files. */
 @RunWith(AndroidJUnit4::class)
 class RepositoryTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val db = Room.inMemoryDatabaseBuilder(context, ReelwiseDatabase::class.java).allowMainThreadQueries().build()
-    private val storeFile = File(context.filesDir, "test-${System.nanoTime()}.preferences_pb")
+    private val stamp = System.nanoTime()
+    private val settingsFile = File(context.filesDir, "settings-$stamp.preferences_pb")
+    private val secretsFile = File(context.filesDir, "secrets-$stamp.preferences_pb")
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val api = RecordingApi()
+    private val services = FakeServices()
+    private val keyStore = KeyStore(PreferenceDataStoreFactory.create { secretsFile })
+    private var now = 42L
     private val repo = DefaultRepository(
         api,
         db,
-        SettingsStore(PreferenceDataStoreFactory.create { storeFile }),
-        Json { ignoreUnknownKeys = true; encodeDefaults = true },
-    ) { 42L }
+        SettingsStore(PreferenceDataStoreFactory.create { settingsFile }, json),
+        keyStore,
+        TmdbClient(services.client(), keyStore, json),
+        json,
+    ) { now++ }
 
     @After
     fun tearDown() {
         db.close()
-        storeFile.delete()
+        settingsFile.delete()
+        secretsFile.delete()
     }
 
     @Test
-    fun ratingsAndRegionAreSentAndTheFeedIsCached() = runTest {
+    fun ratingsRegionAndTasteAreSentAndTheFeedIsCached() = runTest {
         repo.setRegion("GB")
         repo.rate(title(1), Signal.LIKE)
         repo.rate(title(2, MediaType.TV), Signal.DISMISS)
@@ -68,7 +86,40 @@ class RepositoryTest {
         val cached = repo.feed(FeedFilter.SERIES).first()
         assertNotNull(cached)
         assertEquals(listOf(7), cached!!.response.items.map { it.title.id })
-        assertEquals(42L, cached.fetchedAt)
+    }
+
+    @Test
+    fun keysAreCheckedWithTmdbBeforeSavingAndStayOutOfSettings() = runTest {
+        services.tmdbStatus = 401
+        val rejected = repo.saveKeys(SavedKeys("bad-key"))
+        assertTrue(rejected.isFailure)
+        assertEquals("Your TMDB key was rejected. Check it in Settings.", rejected.exceptionOrNull()!!.userMessage())
+        assertFalse(repo.hasTmdbKey.first())
+
+        services.tmdbStatus = 200
+        assertTrue(repo.saveKeys(SavedKeys("  good-key ", "gsk_123", "omdb_1")).isSuccess)
+        assertTrue(repo.hasTmdbKey.first())
+        assertEquals(SavedKeys("good-key", "gsk_123", "omdb_1"), repo.savedKeys())
+        assertEquals("good-key", services.requests.last().url.queryParameter("api_key"))
+        // The keys live in their own file, which the backup rules leave out.
+        assertFalse(settingsFile.exists() && settingsFile.readText(Charsets.ISO_8859_1).contains("good-key"))
+        assertTrue(secretsFile.readText(Charsets.ISO_8859_1).contains("good-key"))
+    }
+
+    @Test
+    fun theTasteQuizBecomesInteractionsAndAProfile() = runTest {
+        val watched = listOf(title(1), title(2), title(3), title(4, MediaType.TV))
+        val taste = TasteProfile(lovedGenres = listOf("comedy"), freshness = Freshness.LATEST, languages = listOf("hi"))
+        repo.saveTaste(taste, watched, loved = setOf(title(2).key))
+
+        val stored = db.interactions().getAll()
+        assertEquals(listOf(1, 3, 4, 2), stored.map { it.id }) // the loved one is most recent
+        assertEquals(Signal.LIKE, stored.last().signal)
+        assertTrue(stored.dropLast(1).all { it.signal == Signal.SEEN })
+        assertTrue(repo.settings.first().onboardingDone)
+
+        repo.refreshFeed(FeedFilter.ALL)
+        assertEquals(taste, api.lastRequest!!.taste)
     }
 
     @Test
@@ -102,5 +153,9 @@ class RepositoryTest {
         override suspend fun ask(body: AskRequest) = AskResponse(QueryIntent(), emptyList(), emptyList(), "rules")
 
         override suspend fun title(type: String, id: Int, region: String) = TitleDetail(summary = title(id))
+
+        override suspend fun search(query: String): List<TitleSummary> = emptyList()
+
+        override suspend fun person(id: Int) = com.reelwise.app.data.model.PersonDetail(id, "Person $id")
     }
 }

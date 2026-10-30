@@ -19,3 +19,5 @@ android/.kotlin/
 
 # Secrets
 .env
+*.jks
+*.keystore

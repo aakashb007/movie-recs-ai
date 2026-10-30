@@ -3,30 +3,26 @@ package com.reelwise.app.data.remote
 import com.reelwise.app.data.model.AskRequest
 import com.reelwise.app.data.model.AskResponse
 import com.reelwise.app.data.model.OnboardingResponse
+import com.reelwise.app.data.model.PersonDetail
 import com.reelwise.app.data.model.RecommendationRequest
 import com.reelwise.app.data.model.RecommendationResponse
 import com.reelwise.app.data.model.TitleDetail
-import retrofit2.http.Body
-import retrofit2.http.GET
-import retrofit2.http.POST
-import retrofit2.http.Path
-import retrofit2.http.Query
+import com.reelwise.app.data.model.TitleSummary
 
-/** The Reelwise backend. It holds the TMDB and Groq keys; the app never sees them. */
+/**
+ * Everything the app asks of its recommendation engine. This used to be a Retrofit client for
+ * the backend; LocalReelwiseApi now answers it on the phone, calling TMDB and Groq directly.
+ */
 interface ReelwiseApi {
-    @GET("v1/onboarding")
     suspend fun onboarding(): OnboardingResponse
 
-    @POST("v1/recommendations")
-    suspend fun recommendations(@Body body: RecommendationRequest): RecommendationResponse
+    suspend fun recommendations(body: RecommendationRequest): RecommendationResponse
 
-    @POST("v1/ask")
-    suspend fun ask(@Body body: AskRequest): AskResponse
+    suspend fun ask(body: AskRequest): AskResponse
 
-    @GET("v1/titles/{type}/{id}")
-    suspend fun title(
-        @Path("type") type: String,
-        @Path("id") id: Int,
-        @Query("region") region: String,
-    ): TitleDetail
+    suspend fun title(type: String, id: Int, region: String): TitleDetail
+
+    suspend fun search(query: String): List<TitleSummary>
+
+    suspend fun person(id: Int): PersonDetail
 }

@@ -1,12 +1,15 @@
 package com.reelwise.app.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ThumbDown
 import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.ThumbDown
 import androidx.compose.material.icons.rounded.ThumbUp
 import androidx.compose.material.icons.rounded.Visibility
@@ -24,14 +27,16 @@ private data class SignalOption(val signal: Signal, val label: String, val on: I
 
 private val options = listOf(
     SignalOption(Signal.LIKE, "Loved it", Icons.Rounded.ThumbUp, Icons.Outlined.ThumbUp),
+    SignalOption(Signal.MORE, "More like this", Icons.Rounded.AutoAwesome, Icons.Outlined.AutoAwesome),
     SignalOption(Signal.DISLIKE, "Not for me", Icons.Rounded.ThumbDown, Icons.Outlined.ThumbDown),
     SignalOption(Signal.SEEN, "Seen it", Icons.Rounded.Visibility, Icons.Outlined.Visibility),
 )
 
-/** Tapping the selected option again clears it. */
+/** Tapping the selected option again clears it. Wraps onto a second line on narrow screens. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SignalBar(current: Signal?, onSignal: (Signal?) -> Unit, modifier: Modifier = Modifier) {
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         options.forEach { option ->
             val selected = current == option.signal
             FilterChip(

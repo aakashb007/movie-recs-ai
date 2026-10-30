@@ -1,0 +1,83 @@
+name: Release APK
+
+# Builds the signed release APK, refuses it unless it carries the key registered with Google
+# (Android OAuth client "Reelwise Android"), and publishes it. Pull requests build and verify only.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  EXPECTED_SHA1: FD:CE:70:18:8B:FE:F4:F5:BF:BF:63:1C:37:66:F1:CF:B2:CA:FB:7A
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # creates the GitHub Release
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode the signing keystore
+        env:
+          REELWISE_KEYSTORE_B64: ${{ secrets.REELWISE_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$REELWISE_KEYSTORE_B64" ]; then
+            echo "::error::Secret REELWISE_KEYSTORE_B64 is not set"; exit 1
+          fi
+          echo "$REELWISE_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/reelwise.jks"
+          echo "REELWISE_KEYSTORE_FILE=$RUNNER_TEMP/reelwise.jks" >> "$GITHUB_ENV"
+
+      - name: Build the release APK
+        env:
+          REELWISE_KEYSTORE_PASSWORD: ${{ secrets.REELWISE_KEYSTORE_PASSWORD }}
+          REELWISE_KEY_ALIAS: ${{ secrets.REELWISE_KEY_ALIAS }} # optional; defaults to "reelwise"
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: Verify the signature and SHA-1
+        run: |
+          apk=app/build/outputs/apk/release/app-release.apk
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
+          "$apksigner" verify --print-certs "$apk" | tee "$RUNNER_TEMP/certs.txt"
+          actual=$(grep -m1 "certificate SHA-1 digest" "$RUNNER_TEMP/certs.txt" | awk '{print $NF}' | tr 'a-f' 'A-F' | sed 's/../&:/g; s/:$//')
+          echo "Signed with SHA-1 $actual"
+          if [ "$actual" != "$EXPECTED_SHA1" ]; then
+            echo "::error::APK SHA-1 $actual is not the registered $EXPECTED_SHA1; Google sign-in would fail"
+            exit 1
+          fi
+          cp "$apk" "$RUNNER_TEMP/reelwise.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reelwise-release-apk
+          path: ${{ runner.temp }}/reelwise.apk
+
+      # One rolling release, so the newest APK is always at the same link.
+      - name: Publish as the "latest" GitHub Release
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest "$RUNNER_TEMP/reelwise.apk" --target "$GITHUB_SHA" \
+            --title "Reelwise (build ${GITHUB_SHA::7})" \
+            --notes "Signed release APK, SHA-1 $EXPECTED_SHA1."
+
+      - name: Remove the keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/reelwise.jks"

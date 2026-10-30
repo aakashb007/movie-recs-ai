@@ -1,5 +1,6 @@
 package com.reelwise.app.ui.watchlist
 
+import com.reelwise.app.ui.navigation.navClearance
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -77,14 +78,14 @@ fun WatchlistContent(
 ) {
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 120.dp),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = navClearance()),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             Column(Modifier.statusBarsPadding().padding(top = 16.dp)) {
-                Text("SAVED FOR LATER", style = Eyebrow, color = MaterialTheme.colorScheme.primary)
+                Text("SAVED FOR LATER", style = Eyebrow, color = MaterialTheme.colorScheme.tertiary)
                 Text("Watchlist", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
             }
         }

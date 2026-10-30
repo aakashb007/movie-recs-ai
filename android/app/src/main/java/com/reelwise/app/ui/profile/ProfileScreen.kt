@@ -1,5 +1,6 @@
 package com.reelwise.app.ui.profile
 
+import com.reelwise.app.ui.navigation.navClearance
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,13 +19,16 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Contrast
 import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
@@ -50,6 +54,8 @@ import com.reelwise.app.BuildConfig
 import com.reelwise.app.data.Repository
 import com.reelwise.app.data.local.InteractionEntity
 import com.reelwise.app.data.local.Settings
+import com.reelwise.app.data.local.ThemeMode
+import com.reelwise.app.ui.account.GoogleAccountCard
 import com.reelwise.app.data.model.Signal
 import com.reelwise.app.data.model.TitleSummary
 import com.reelwise.app.ui.components.PosterCard
@@ -58,6 +64,8 @@ import com.reelwise.app.ui.theme.Eyebrow
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.Locale
 import javax.inject.Inject
+import com.reelwise.app.data.model.LearnedTaste
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -69,23 +77,41 @@ data class ProfileUiState(
     val liked: List<TitleSummary> = emptyList(),
     val dislikedCount: Int = 0,
     val seenCount: Int = 0,
+    val learned: LearnedTaste? = null,
 )
 
 private fun InteractionEntity.toSummary() = TitleSummary(id = id, mediaType = mediaType, title = title, posterPath = posterPath)
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(private val repository: Repository) : ViewModel() {
-    val state: StateFlow<ProfileUiState> = combine(repository.settings, repository.interactions) { settings, list ->
+    /** Re-learned whenever ratings, My list or the quiet signals change. */
+    private val learned = MutableStateFlow<LearnedTaste?>(null)
+
+    init {
+        viewModelScope.launch {
+            combine(repository.interactions, repository.watchlist) { a, b -> a.size + b.size }
+                .collect { learned.value = repository.learnedTaste() }
+        }
+    }
+
+    val state: StateFlow<ProfileUiState> = combine(repository.settings, repository.interactions, learned) { settings, list, taste ->
         ProfileUiState(
+            learned = taste,
             settings = settings,
-            liked = list.filter { it.signal == Signal.LIKE }.sortedByDescending { it.updatedAt }.map { it.toSummary() },
+            liked = list.filter { it.signal == Signal.LIKE || it.signal == Signal.MORE }.sortedByDescending { it.updatedAt }.map { it.toSummary() },
             dislikedCount = list.count { it.signal == Signal.DISLIKE },
             seenCount = list.count { it.signal == Signal.SEEN },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProfileUiState())
 
     fun setRegion(region: String) = viewModelScope.launch { repository.setRegion(region) }
+    fun setThemeMode(mode: ThemeMode) = viewModelScope.launch { repository.setThemeMode(mode) }
     fun setDynamicColor(enabled: Boolean) = viewModelScope.launch { repository.setDynamicColor(enabled) }
+    fun forgetQuietSignals() = viewModelScope.launch {
+        repository.forgetQuietSignals()
+        learned.value = repository.learnedTaste()
+    }
+
     fun reset(then: () -> Unit) = viewModelScope.launch {
         repository.resetTaste()
         then()
@@ -102,6 +128,7 @@ val REGIONS = listOf(
 fun ProfileRoute(
     onOpenTitle: (TitleSummary) -> Unit,
     onRetakeQuiz: () -> Unit,
+    onApiKeys: () -> Unit,
     viewModel: ProfileViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -110,6 +137,10 @@ fun ProfileRoute(
         onOpenTitle = onOpenTitle,
         onRegion = { viewModel.setRegion(it) },
         onDynamicColor = { viewModel.setDynamicColor(it) },
+        onThemeMode = { viewModel.setThemeMode(it) },
+        onApiKeys = onApiKeys,
+        account = { GoogleAccountCard() },
+        onForgetQuietSignals = { viewModel.forgetQuietSignals() },
         onRetakeQuiz = onRetakeQuiz,
         onReset = { viewModel.reset(onRetakeQuiz) },
     )
@@ -123,17 +154,21 @@ fun ProfileContent(
     onDynamicColor: (Boolean) -> Unit,
     onRetakeQuiz: () -> Unit,
     onReset: () -> Unit,
+    onThemeMode: (ThemeMode) -> Unit = {},
+    onApiKeys: () -> Unit = {},
+    account: @Composable () -> Unit = {},
+    onForgetQuietSignals: () -> Unit = {},
 ) {
     var confirmReset by remember { mutableStateOf(false) }
     var regionMenu by remember { mutableStateOf(false) }
     val settings = state.settings
     LazyColumn(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(bottom = 32.dp),
+        contentPadding = PaddingValues(bottom = navClearance()),
     ) {
         item {
             Column(Modifier.statusBarsPadding().padding(16.dp)) {
-                Text("YOUR TASTE", style = Eyebrow, color = MaterialTheme.colorScheme.primary)
+                Text("YOUR TASTE", style = Eyebrow, color = MaterialTheme.colorScheme.tertiary)
                 Text("Profile", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
                 Spacer(Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -154,6 +189,16 @@ fun ProfileContent(
                 }
                 Spacer(Modifier.height(16.dp))
             }
+        }
+        item {
+            LearnedTasteCard(state.learned, onForgetQuietSignals)
+            Spacer(Modifier.height(20.dp))
+        }
+        item {
+            SectionHeader(null, "Google account")
+            Spacer(Modifier.height(10.dp))
+            account()
+            Spacer(Modifier.height(20.dp))
         }
         item {
             SectionHeader(null, "Settings")
@@ -178,6 +223,25 @@ fun ProfileContent(
                     }
                 }
             }
+            ListItem(
+                headlineContent = { Text("Theme") },
+                supportingContent = {
+                    Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(ThemeMode.DARK to "Dark", ThemeMode.LIGHT to "Light", ThemeMode.SYSTEM to "System").forEach { (mode, label) ->
+                            FilterChip(selected = settings?.themeMode == mode, onClick = { onThemeMode(mode) }, label = { Text(label) })
+                        }
+                    }
+                },
+                leadingContent = { Icon(Icons.Rounded.Contrast, null) },
+                colors = colors,
+            )
+            ListItem(
+                headlineContent = { Text("API keys") },
+                supportingContent = { Text("Your TMDB and Groq keys, stored only on this phone") },
+                leadingContent = { Icon(Icons.Rounded.Key, null) },
+                colors = colors,
+                modifier = Modifier.clickable(onClick = onApiKeys),
+            )
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 ListItem(
                     headlineContent = { Text("Match wallpaper colours") },
@@ -190,8 +254,8 @@ fun ProfileContent(
                 )
             }
             ListItem(
-                headlineContent = { Text("Rate more titles") },
-                supportingContent = { Text("Go back through the taste quiz") },
+                headlineContent = { Text("Retake the taste quiz") },
+                supportingContent = { Text("Add more watched titles, change genres or filters") },
                 leadingContent = { Icon(Icons.Rounded.Replay, null) },
                 colors = colors,
                 modifier = Modifier.clickable(onClick = onRetakeQuiz),
@@ -210,8 +274,9 @@ fun ProfileContent(
                 Spacer(Modifier.height(6.dp))
                 Text(
                     "This product uses the TMDB API but is not endorsed or certified by TMDB. " +
-                        "Streaming availability is provided by JustWatch. Recommendations are trained on " +
-                        "the MovieLens dataset from GroupLens Research.",
+                        "Streaming availability is provided by JustWatch. Recommendations are worked out " +
+                        "on this phone from your ratings and TMDB data; typed requests can use Groq, and IMDb " +
+                        "ratings come from OMDb when you add a key.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -221,6 +286,8 @@ fun ProfileContent(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Spacer(Modifier.height(10.dp))
+                Text("Made by Aakash Saleem", style = MaterialTheme.typography.titleSmall)
             }
         }
     }
@@ -241,7 +308,7 @@ fun ProfileContent(
 private fun Stat(label: String, value: Int, modifier: Modifier = Modifier) {
     Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(18.dp), modifier = modifier) {
         Column(Modifier.padding(14.dp).semantics(mergeDescendants = true) {}) {
-            Text(value.toString(), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+            Text(value.toString(), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.tertiary)
             Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }

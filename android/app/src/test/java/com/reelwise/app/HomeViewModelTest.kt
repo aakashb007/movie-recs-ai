@@ -36,9 +36,9 @@ class HomeViewModelTest {
         advanceUntilIdle()
         val s = vm.state.value
         assertEquals(listOf(FeedFilter.ALL), repo.refreshCalls)
-        assertEquals(5, s.hero.size)
+        assertEquals(12, s.items.size)
         assertEquals("Title 100", s.sections.first().title)
-        assertEquals("Because you liked", s.sections.first().eyebrow)
+        assertEquals("BECAUSE YOU LOVED", s.sections.first().eyebrow)
         assertFalse(s.firstLoad)
     }
 
@@ -49,7 +49,7 @@ class HomeViewModelTest {
         backgroundScope.launch { vm.state.collect() }
         advanceUntilIdle()
         assertTrue(repo.refreshCalls.isEmpty())
-        assertEquals(5, vm.state.value.hero.size)
+        assertEquals(12, vm.state.value.items.size)
     }
 
     @Test
@@ -57,10 +57,10 @@ class HomeViewModelTest {
         val vm = vm()
         backgroundScope.launch { vm.state.collect() }
         advanceUntilIdle()
-        val first = vm.state.value.hero.first().title
+        val first = vm.state.value.items.first().title
         vm.rate(first, Signal.DISMISS)
         advanceTimeBy(100)
-        assertFalse(vm.state.value.hero.any { it.title.key == first.key })
+        assertFalse(vm.state.value.items.any { it.title.key == first.key })
         assertEquals(1, repo.refreshCalls.size) // not yet: debounced
         advanceUntilIdle()
         assertEquals(2, repo.refreshCalls.size)
@@ -94,10 +94,22 @@ class HomeViewModelTest {
     @Test
     fun `sections group by explanation and keep every item exactly once`() {
         val items = (1..20).map { rec(it, because = listOf(100, 101, 102, null)[it % 4], reason = "r") }
-        val (hero, sections) = buildSections(items)
+        val (hero, sections) = buildSections(items, currentYear = 2026)
         val all = hero + sections.flatMap { it.items }
         assertEquals(items.toSet(), all.toSet())
         assertEquals(items.size, all.size)
         assertEquals("More picks for you", sections.last().title)
+    }
+
+    @Test
+    fun `fresh releases and series get their own rows, watched seeds say watched`() {
+        val fresh = (1..4).map { rec(10 + it).let { r -> r.copy(title = r.title.copy(year = 2026)) } }
+        val watched = (1..3).map { rec(20 + it, because = 7, reason = "Because you watched Title 7") }
+        val series = (1..3).map { rec(30 + it).let { r -> r.copy(title = r.title.copy(mediaType = com.reelwise.app.data.model.MediaType.TV)) } }
+        val hero = (1..5).map { rec(it) }
+        val (_, sections) = buildSections(hero + fresh + watched + series, currentYear = 2026)
+        assertEquals(listOf("Fresh releases for you", "Title 7", "Series you'd binge"), sections.map { it.title })
+        assertEquals("BECAUSE YOU WATCHED", sections[1].eyebrow)
+        assertEquals("NEW · 2025–26", sections[0].eyebrow)
     }
 }

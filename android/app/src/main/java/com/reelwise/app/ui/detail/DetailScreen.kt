@@ -1,6 +1,7 @@
 package com.reelwise.app.ui.detail
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,6 +53,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -74,6 +76,7 @@ import com.reelwise.app.ui.theme.Eyebrow
 fun DetailRoute(
     onBack: () -> Unit,
     onOpenTitle: (TitleSummary) -> Unit,
+    onOpenPerson: (Int) -> Unit = {},
     viewModel: DetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -86,6 +89,7 @@ fun DetailRoute(
         onOpenTitle = onOpenTitle,
         onRetry = viewModel::reload,
         onOpenUrl = { runCatching { uri.openUri(it) } },
+        onOpenPerson = onOpenPerson,
     )
 }
 
@@ -98,11 +102,12 @@ fun DetailContent(
     onOpenTitle: (TitleSummary) -> Unit,
     onRetry: () -> Unit,
     onOpenUrl: (String) -> Unit,
+    onOpenPerson: (Int) -> Unit = {},
 ) {
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val detail = state.detail
         when {
-            detail != null -> Body(detail, state, onSignal, onToggleWatchlist, onOpenTitle, onOpenUrl)
+            detail != null -> Body(detail, state, onSignal, onToggleWatchlist, onOpenTitle, onOpenUrl, onOpenPerson)
             state.error != null -> Box(Modifier.align(Alignment.Center)) { ErrorState(state.error, onRetry) }
             else -> CircularProgressIndicator(Modifier.align(Alignment.Center))
         }
@@ -128,6 +133,7 @@ private fun Body(
     onToggleWatchlist: () -> Unit,
     onOpenTitle: (TitleSummary) -> Unit,
     onOpenUrl: (String) -> Unit,
+    onOpenPerson: (Int) -> Unit,
 ) {
     val s = detail.summary
     val bg = MaterialTheme.colorScheme.background
@@ -163,7 +169,7 @@ private fun Body(
                     Text(
                         if (s.mediaType == MediaType.TV) "SERIES" else "FILM",
                         style = Eyebrow,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.tertiary,
                     )
                     Text(
                         s.title,
@@ -199,6 +205,24 @@ private fun Body(
         }
         item(key = "actions") {
             Column(Modifier.offset(y = (-40).dp).padding(horizontal = 16.dp)) {
+                detail.imdb?.let { score ->
+                    Row(
+                        Modifier
+                            .padding(bottom = 12.dp)
+                            .then(detail.imdbId?.let { id -> Modifier.clickable(onClickLabel = "Open on IMDb") { onOpenUrl("https://www.imdb.com/title/$id/") } } ?: Modifier)
+                            .semantics(mergeDescendants = true) {},
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        com.reelwise.app.ui.home.ImdbBadge(score.rating)
+                        score.votes?.let {
+                            Text("${"%,d".format(java.util.Locale.US, it)} IMDb votes", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        score.rottenTomatoes?.let {
+                            Text("Rotten Tomatoes $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     detail.trailerYoutubeKey?.let { key ->
                         Button(onClick = { onOpenUrl("https://www.youtube.com/watch?v=$key") }) {
@@ -237,29 +261,31 @@ private fun Body(
             }
         }
         item(key = "providers") { WhereToWatch(detail, state.region, onOpenUrl) }
+        if (detail.crew.isNotEmpty()) {
+            item(key = "crew") {
+                Spacer(Modifier.height(24.dp))
+                val heading = when {
+                    detail.crew.all { it.job == "Director" } -> "Directed by"
+                    detail.crew.all { it.job == "Creator" } -> "Created by"
+                    else -> "Created and directed by"
+                }
+                SectionHeader(null, heading)
+                Spacer(Modifier.height(12.dp))
+                LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    items(detail.crew, key = { it.id }) { person ->
+                        PersonChip(person.name, person.job, person.profilePath, { onOpenPerson(person.id) })
+                    }
+                }
+            }
+        }
         if (detail.cast.isNotEmpty()) {
             item(key = "cast") {
                 Spacer(Modifier.height(24.dp))
                 SectionHeader(null, "Cast")
                 Spacer(Modifier.height(12.dp))
                 LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    items(detail.cast, key = { it.name + it.character }) { member ->
-                        Column(
-                            Modifier.width(84.dp).semantics(mergeDescendants = true) {},
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Box(Modifier.size(72.dp).clip(CircleShape)) {
-                                ArtworkImage(Tmdb.profile(member.profilePath), member.name.take(1), Modifier.fillMaxSize())
-                            }
-                            Text(member.name, style = MaterialTheme.typography.labelMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            Text(
-                                member.character,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
+                    items(detail.cast, key = { (it.id ?: 0).toString() + it.name + it.character }) { member ->
+                        PersonChip(member.name, member.character, member.profilePath, member.id?.let { id -> { onOpenPerson(id) } })
                     }
                 }
             }
@@ -284,6 +310,33 @@ private fun Body(
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 28.dp),
             )
         }
+    }
+}
+
+/** A round photo with a name and role; tappable when it leads to a filmography. */
+@Composable
+fun PersonChip(name: String, role: String, profilePath: String?, onClick: (() -> Unit)?) {
+    Column(
+        Modifier
+            .width(88.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .then(if (onClick != null) Modifier.clickable(onClickLabel = "See filmography", onClick = onClick) else Modifier)
+            .padding(vertical = 4.dp)
+            .semantics(mergeDescendants = true) {},
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(Modifier.size(72.dp).clip(CircleShape)) {
+            ArtworkImage(Tmdb.profile(profilePath), name.take(1), Modifier.fillMaxSize())
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(name, style = MaterialTheme.typography.labelMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+        Text(
+            role,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

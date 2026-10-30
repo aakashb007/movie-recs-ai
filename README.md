@@ -1,5 +1,11 @@
 # Reelwise: movie and TV recommendations you can check
 
+> **This branch (`on-device`) runs entirely on the phone. No server.** You paste your own
+> free TMDB key (and optionally a Groq key) on first launch; the recommendation engine in
+> `android/app/src/main/java/com/reelwise/app/engine/` is a Kotlin port of `backend/app/`
+> without the MovieLens model. Download the latest build:
+> [reelwise-on-device.apk](https://github.com/aakashb007/movie-recs-ai/raw/apk-on-device/reelwise-on-device.apk).
+
 An Android app (Kotlin, Jetpack Compose, Material 3) backed by a small Python service that
 recommends movies and series, explains every pick, and lets you ask for something in plain
 words ("something like Dark but lighter").
@@ -73,24 +79,66 @@ after a while takes ~30 s.
 
 ```bash
 cd android
-./gradlew installDebug                                   # emulator -> backend on your machine (10.0.2.2:8000)
-./gradlew assembleRelease -PapiBaseUrl=https://your-api.onrender.com/
+./gradlew installDebug        # or assembleRelease: app/build/outputs/apk/release/app-release.apk
 ```
 
-CI builds both APKs and uploads them as the `apks` artifact. Set the repository variable
-`API_BASE_URL` to your deployed backend so the CI-built APK works on a real phone.
+On first launch the app asks for your **TMDB key** (free at themoviedb.org → Settings → API;
+a v3 key or a v4 read access token both work) and checks it with TMDB before saving. The
+**Groq key** is optional and only makes Ask smarter. The **OMDb key** is optional too and adds
+IMDb ratings (TMDB itself has none). Keys are stored in their own DataStore
+file on the phone, which the backup rules leave out, and can be changed in Profile → API keys.
+
+CI builds both APKs on every push and also publishes the release APK to the `apk-<branch>`
+branch for a direct download.
 
 ### What's in the app
-- **Taste quiz:** rate ~5 well-known titles chosen to span genres (MMR over genres).
-- **For you:** a hero carousel of top picks, then rows titled by their reason ("Because you liked …").
-  Long-press any poster to say Loved it / Not for me / Seen it / Not interested; the title disappears at once
-  and the list re-ranks a moment later.
+- **Taste quiz (4 steps):** tick everything you've already watched (search covers all of TMDB) and
+  heart the ones you loved; love or ban genres; choose how new, movies or series, and languages;
+  review and save. Watched titles are never suggested; loved ones seed "because you loved".
+- **For you:** every pick as one big poster; swipe left and right. **Browse** has the same picks in rows
+  titled by their reason ("Because you loved …"), fresh releases and series.
+- **Circle menu (frosted glass):** press and hold any poster, slide onto a petal (the phone ticks on each one) and let go:
+  Details, Loved it, More like this, My list, Seen it, Not for me, Not interested. The app behind it blurs.
+- **Feel-good** and **Classics** chips: uplifting comedy/family/animation/romance (never horror or thrillers),
+  or films from before 2000 including cult favourites, still ranked by your taste.
+- **Minimum rating** (quiz): IMDb when you add a free OMDb key (Profile → API keys), otherwise TMDB.
+- **Learns from you:** every rating, My list add, opened details page and swiped-past card is evidence
+  for or against a title's genres, language, decade and film-vs-series: More like this +1.5 (also seeds
+  "fans also liked" first, with double votes), Loved it +1, My list (want to
+  watch) +0.6, opened +0.15, Seen it +0.1 (it mostly means "don't suggest it again"), swiped past −0.1,
+  Not interested −1 (aimed at the genre and type, barely at language and decade), Not for me −2. Recent activity counts more
+  (half-life 120 days) and one-off reactions are shrunk towards neutral, so a single rating doesn't
+  swing the feed. The result moves each pick by up to ±0.2 on top of the content and "fans also liked"
+  scores, pushes down titles you keep swiping past, and is shown in Profile → **What Reelwise has learned**.
 - **Ask:** type a mood or a comparison. The app shows how it read your request
   (genres, exclusions, decade, "Like Dark") so a wrong reading is visible.
 - **Details:** where to watch in your region (stream/free/rent/buy), trailer, cast, more like this.
 - **Watchlist** and **Profile** (region, Material You colours, clear taste profile).
 - Works offline from the last cached feed; refreshes in the background on Wi-Fi (WorkManager).
-- Your ratings live only on the phone (Room) and are sent with each request; there are no accounts.
+- **Google sign-in (optional, Profile → Google account):** backs up ratings, My list, taste quiz and
+  settings to one file (`reelwise-backup.json`) in a hidden app folder of your own Google Drive
+  (`drive.appdata` scope; the app can't see your other files). Changes back up automatically a few
+  seconds later; there are also **Back up now** and **Restore from Drive** buttons. API keys are only
+  included if you turn on **Include API keys in backup**.
+
+### Signed release APK and Google sign-in
+Google lets the app sign in only when the APK is signed with the key registered in the Google Cloud
+Android OAuth client (package `com.reelwise.app`, SHA-1
+`FD:CE:70:18:8B:FE:F4:F5:BF:BF:63:1C:37:66:F1:CF:B2:CA:FB:7A`). The workflow `release.yml` builds
+the release APK on every push to `main`, fails if the signature's SHA-1 differs, and publishes it as
+the `latest` GitHub Release.
+
+Signing values come from environment variables, or `android/local.properties` for local builds:
+
+| Environment variable | local.properties | |
+|---|---|---|
+| `REELWISE_KEYSTORE_FILE` | `reelwise.storeFile` | path to the .jks (CI decodes the `REELWISE_KEYSTORE_B64` secret) |
+| `REELWISE_KEYSTORE_PASSWORD` | `reelwise.storePassword` | secret of the same name |
+| `REELWISE_KEY_ALIAS` | `reelwise.keyAlias` | optional, default `reelwise` |
+| `REELWISE_KEY_PASSWORD` | `reelwise.keyPassword` | optional, default: the store password |
+
+Without them the build uses the local debug key, whose SHA-1 differs, so sign-in shows
+"APK not signed with the registered key". Keystores (`*.jks`, `*.keystore`) are git-ignored.
 
 ## Data and licences
 - This product uses the TMDB API but is not endorsed or certified by TMDB.

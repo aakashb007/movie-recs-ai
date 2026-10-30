@@ -2,8 +2,10 @@ package com.reelwise.app
 
 import com.reelwise.app.data.CachedFeed
 import com.reelwise.app.data.Repository
+import com.reelwise.app.data.SavedKeys
 import com.reelwise.app.data.local.InteractionEntity
 import com.reelwise.app.data.local.Settings
+import com.reelwise.app.data.local.ThemeMode
 import com.reelwise.app.data.local.WatchlistEntity
 import com.reelwise.app.data.model.AskResponse
 import com.reelwise.app.data.model.FeedFilter
@@ -12,6 +14,8 @@ import com.reelwise.app.data.model.QueryIntent
 import com.reelwise.app.data.model.RecItem
 import com.reelwise.app.data.model.RecommendationResponse
 import com.reelwise.app.data.model.Signal
+import com.reelwise.app.data.model.TasteProfile
+import com.reelwise.app.data.model.TitleKey
 import com.reelwise.app.data.model.TitleDetail
 import com.reelwise.app.data.model.TitleRef
 import com.reelwise.app.data.model.TitleSummary
@@ -39,11 +43,40 @@ class FakeRepository : Repository {
     var failRefresh = false
     val refreshCalls = mutableListOf<FeedFilter>()
     var onboardingTitles: List<TitleSummary> = emptyList()
-    var now = 1_000_000L
+    var searchResults: List<TitleSummary> = emptyList()
+    val searches = mutableListOf<String>()
+    val keys = MutableStateFlow(SavedKeys(tmdb = "tmdb-key"))
+    var rejectKeys = false
+
+    /** 2026-09-22, so "new" (this year or last) means 2025 or later. */
+    var now = 1_790_000_000_000L
 
     override val settings: Flow<Settings> = settingsFlow
     override val interactions: Flow<List<InteractionEntity>> = interactionsFlow
     override val watchlist: Flow<List<WatchlistEntity>> = watchlistFlow
+    override val hasTmdbKey: Flow<Boolean> = keys.map { it.tmdb.isNotBlank() }
+
+    override suspend fun saveKeys(keys: SavedKeys): Result<Unit> {
+        if (rejectKeys) return Result.failure(com.reelwise.app.engine.TmdbAuthException())
+        this.keys.value = keys
+        return Result.success(Unit)
+    }
+
+    override suspend fun savedKeys(): SavedKeys = keys.value
+
+    override suspend fun search(query: String): Result<List<TitleSummary>> {
+        searches += query
+        return Result.success(searchResults)
+    }
+
+    override suspend fun saveTaste(taste: TasteProfile, watched: List<TitleSummary>, loved: Set<TitleKey>) {
+        watched.forEach { rate(it, if (it.key in loved) Signal.LIKE else Signal.SEEN) }
+        settingsFlow.value = settingsFlow.value.copy(taste = taste, onboardingDone = true)
+    }
+
+    override suspend fun setThemeMode(mode: ThemeMode) {
+        settingsFlow.value = settingsFlow.value.copy(themeMode = mode)
+    }
 
     override fun feed(filter: FeedFilter): Flow<CachedFeed?> = feeds.getValue(filter)
 
@@ -61,6 +94,9 @@ class FakeRepository : Repository {
 
     override suspend fun detail(mediaType: MediaType, id: Int): Result<TitleDetail> =
         Result.success(TitleDetail(summary = title(id, mediaType)))
+
+    override suspend fun person(id: Int): Result<com.reelwise.app.data.model.PersonDetail> =
+        Result.success(com.reelwise.app.data.model.PersonDetail(id, "Person $id"))
 
     override suspend fun rate(title: TitleSummary, signal: Signal?) {
         val others = interactionsFlow.value.filterNot { it.id == title.id && it.mediaType == title.mediaType }

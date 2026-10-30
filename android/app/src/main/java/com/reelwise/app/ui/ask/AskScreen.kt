@@ -1,5 +1,6 @@
 package com.reelwise.app.ui.ask
 
+import com.reelwise.app.ui.navigation.navClearance
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -79,12 +80,12 @@ fun AskContent(
     val submit = { q: String -> focus.clearFocus(); onSubmit(q) }
     LazyColumn(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(bottom = 24.dp),
+        contentPadding = PaddingValues(bottom = navClearance()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item(key = "header") {
             Column(Modifier.statusBarsPadding().padding(start = 16.dp, end = 16.dp, top = 16.dp)) {
-                Text("ASK REELWISE", style = Eyebrow, color = MaterialTheme.colorScheme.primary)
+                Text("ASK REELWISE", style = Eyebrow, color = MaterialTheme.colorScheme.tertiary)
                 Text(
                     "What are you in the mood for?",
                     style = MaterialTheme.typography.headlineMedium,
@@ -95,7 +96,7 @@ fun AskContent(
                     value = state.query,
                     onValueChange = onQueryChange,
                     placeholder = { Text("Describe a mood, a plot, or a title you loved") },
-                    leadingIcon = { Icon(Icons.Rounded.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary) },
+                    leadingIcon = { Icon(Icons.Rounded.AutoAwesome, null, tint = MaterialTheme.colorScheme.tertiary) },
                     trailingIcon = {
                         when {
                             state.loading -> CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
@@ -163,12 +164,12 @@ private fun Interpretation(result: AskResponse) {
     ) {
         Column(Modifier.padding(16.dp).fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Rounded.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                Icon(Icons.Rounded.AutoAwesome, null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(
                     if (result.parser == "llm") "HOW I READ THAT" else "MATCHED BY KEYWORDS",
                     style = Eyebrow,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.tertiary,
                 )
             }
             if (result.interpretation.summary.isNotBlank()) {

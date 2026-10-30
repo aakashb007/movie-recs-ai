@@ -3,7 +3,10 @@ package com.reelwise.app.data.model
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-/** Wire models mirroring backend/app/schemas.py. */
+/**
+ * App models. They began as the backend's wire format (backend/app/schemas.py) and keep its
+ * snake_case names, which is also the shape cached feeds are stored in on the phone.
+ */
 
 @Serializable
 enum class MediaType(val wire: String) {
@@ -17,6 +20,9 @@ enum class Signal {
     @SerialName("dislike") DISLIKE,
     @SerialName("seen") SEEN,
     @SerialName("dismiss") DISMISS,
+
+    /** Watched it and wants more of this kind: the strongest "this is my taste" signal. */
+    @SerialName("more") MORE,
 }
 
 /** A title is identified by its TMDB id *and* type: movie 1399 and show 1399 are different things. */
@@ -34,6 +40,9 @@ data class TitleSummary(
     @SerialName("vote_average") val voteAverage: Double = 0.0,
     @SerialName("vote_count") val voteCount: Int = 0,
     val genres: List<String> = emptyList(),
+    @SerialName("original_language") val originalLanguage: String? = null,
+    /** IMDb rating via OMDb, filled in only when an OMDb key is saved. */
+    @SerialName("imdb_rating") val imdbRating: Double? = null,
 ) {
     val key: TitleKey get() = TitleKey(id, mediaType)
 }
@@ -61,11 +70,62 @@ data class Interaction(
 )
 
 @Serializable
+enum class Freshness {
+    /** Released in the last 2 years. */
+    @SerialName("latest") LATEST,
+    /** Released in the last 10 years. */
+    @SerialName("recent") RECENT,
+    @SerialName("any") ANY,
+    /** Old classics and cult films: released before 2000. */
+    @SerialName("classics") CLASSICS,
+}
+
+@Serializable
+enum class Mix {
+    @SerialName("both") BOTH,
+    @SerialName("movies") MOVIES,
+    @SerialName("series") SERIES,
+}
+
+/** What the taste quiz learned, beyond the titles themselves (those are interactions). */
+@Serializable
+data class TasteProfile(
+    /** Canonical genre names, as in engine.Genres ("science fiction", "comedy"…). */
+    @SerialName("loved_genres") val lovedGenres: List<String> = emptyList(),
+    @SerialName("avoided_genres") val avoidedGenres: List<String> = emptyList(),
+    val freshness: Freshness = Freshness.ANY,
+    val mix: Mix = Mix.BOTH,
+    /** ISO 639-1 codes; empty means any language. */
+    val languages: List<String> = emptyList(),
+    /** Minimum score out of 10: IMDb when an OMDb key is saved, TMDB otherwise. Null means any. */
+    @SerialName("min_rating") val minRating: Double? = null,
+)
+
+@Serializable
 data class RecommendationRequest(
     val interactions: List<Interaction>,
     @SerialName("media_type") val mediaType: String,
     val region: String,
-    val limit: Int = 40,
+    val limit: Int = 60,
+    val taste: TasteProfile = TasteProfile(),
+    /** What the app has learned from everything the person did; null before there is any evidence. */
+    val learned: LearnedTaste? = null,
+)
+
+/**
+ * Affinities in [-1, 1] learned from ratings, My list, opened and swiped-past titles, with old
+ * evidence fading. Keys: TMDB genre names, ISO language codes, decades (1990), and media types.
+ */
+@Serializable
+data class LearnedTaste(
+    val genres: Map<String, Double> = emptyMap(),
+    val languages: Map<String, Double> = emptyMap(),
+    val decades: Map<Int, Double> = emptyMap(),
+    val types: Map<MediaType, Double> = emptyMap(),
+    /** "movie:123" keys swiped past repeatedly without any reaction: shown less often. */
+    val tired: Set<String> = emptySet(),
+    /** How many titles the model learned from. */
+    val evidence: Int = 0,
 )
 
 @Serializable
@@ -80,6 +140,7 @@ data class AskRequest(
     val interactions: List<Interaction>,
     val region: String,
     val limit: Int = 24,
+    val taste: TasteProfile = TasteProfile(),
 )
 
 @Serializable
@@ -126,6 +187,46 @@ data class CastMember(
     val name: String,
     val character: String = "",
     @SerialName("profile_path") val profilePath: String? = null,
+    /** TMDB person id; opens their filmography. */
+    val id: Int? = null,
+)
+
+/** A director (films) or creator (series). */
+@Serializable
+data class CrewMember(
+    val id: Int,
+    val name: String,
+    val job: String,
+    @SerialName("profile_path") val profilePath: String? = null,
+)
+
+/** One line of a filmography: the title and what the person did on it. */
+@Serializable
+data class PersonCredit(
+    val title: TitleSummary,
+    /** "Director", "Creator", or the character played; empty when unknown. */
+    val role: String,
+    val kind: CreditKind,
+)
+
+@Serializable
+enum class CreditKind { @SerialName("directed") DIRECTED, @SerialName("created") CREATED, @SerialName("acted") ACTED }
+
+@Serializable
+data class PersonDetail(
+    val id: Int,
+    val name: String,
+    val biography: String = "",
+    val birthday: String? = null,
+    val deathday: String? = null,
+    @SerialName("place_of_birth") val placeOfBirth: String? = null,
+    @SerialName("profile_path") val profilePath: String? = null,
+    /** "Acting", "Directing", "Writing"… */
+    val department: String = "",
+    /** Their most widely seen titles, best known first. */
+    @SerialName("known_for") val knownFor: List<TitleSummary> = emptyList(),
+    /** Every credit, newest first; a title can appear once per kind. */
+    val credits: List<PersonCredit> = emptyList(),
 )
 
 @Serializable
@@ -136,12 +237,33 @@ data class TitleDetail(
     val seasons: Int? = null,
     val status: String = "",
     val cast: List<CastMember> = emptyList(),
+    /** Directors for films, creators (and any episode directors) for series. */
+    val crew: List<CrewMember> = emptyList(),
     @SerialName("trailer_youtube_key") val trailerYoutubeKey: String? = null,
     val providers: Providers = Providers(),
     val similar: List<TitleSummary> = emptyList(),
+    @SerialName("imdb_id") val imdbId: String? = null,
+    val imdb: ImdbScore? = null,
+)
+
+/** Scores OMDb reports for an IMDb title. */
+@Serializable
+data class ImdbScore(
+    val rating: Double,
+    val votes: Int? = null,
+    @SerialName("rotten_tomatoes") val rottenTomatoes: String? = null,
+    val metascore: Int? = null,
 )
 
 @Serializable
 data class OnboardingResponse(val items: List<TitleSummary>)
 
-enum class FeedFilter(val wire: String) { ALL("all"), MOVIES("movie"), SERIES("tv") }
+enum class FeedFilter(val wire: String) {
+    ALL("all"),
+    MOVIES("movie"),
+    SERIES("tv"),
+    /** Uplifting comedy, family, animation and romance; never horror, thrillers, war or crime. */
+    FEEL_GOOD("feelgood"),
+    /** Old classics and cult films, released before 2000. */
+    CLASSICS("classics"),
+}

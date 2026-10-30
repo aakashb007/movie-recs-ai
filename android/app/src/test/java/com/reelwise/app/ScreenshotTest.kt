@@ -18,11 +18,35 @@ import com.reelwise.app.ui.ask.AskContent
 import com.reelwise.app.ui.ask.AskUiState
 import com.reelwise.app.ui.detail.DetailContent
 import com.reelwise.app.ui.detail.DetailUiState
-import com.reelwise.app.ui.home.HomeContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import com.reelwise.app.ui.home.BrowseContent
+import com.reelwise.app.ui.home.ForYouContent
+import com.reelwise.app.ui.home.HomeActions
+import com.reelwise.app.data.local.GoogleAccount
+import com.reelwise.app.data.model.LearnedTaste
+import com.reelwise.app.ui.profile.LearnedTasteCard
+import com.reelwise.app.data.sync.SyncState
+import com.reelwise.app.ui.account.GoogleAccountContent
+import com.reelwise.app.ui.radial.RadialMenuHost
+import com.reelwise.app.ui.radial.RadialMenuState
+import com.reelwise.app.ui.radial.RadialRequest
+import com.reelwise.app.ui.radial.titleOptions
 import com.reelwise.app.ui.home.HomeUiState
 import com.reelwise.app.ui.home.buildSections
-import com.reelwise.app.ui.onboarding.OnboardingContent
-import com.reelwise.app.ui.onboarding.OnboardingUiState
+import com.reelwise.app.ui.keys.KeysContent
+import com.reelwise.app.ui.person.PersonContent
+import com.reelwise.app.ui.person.PersonUiState
+import com.reelwise.app.ui.keys.KeysUiState
+import com.reelwise.app.ui.onboarding.GenreChoice
+import com.reelwise.app.ui.onboarding.QuizActions
+import com.reelwise.app.ui.onboarding.QuizContent
+import com.reelwise.app.ui.onboarding.QuizStep
+import com.reelwise.app.ui.onboarding.QuizUiState
 import com.reelwise.app.ui.theme.ReelwiseTheme
 import org.junit.Rule
 import org.junit.Test
@@ -45,7 +69,10 @@ class ScreenshotTest {
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/$name.png")
     }
 
-    private val feed = (1..14).map { rec(it, because = if (it % 2 == 0) 90 else 91, reason = "Because you liked Title ${if (it % 2 == 0) 90 else 91}") }
+    private val feed = (1..14).map { i ->
+        val r = rec(i, because = if (i % 2 == 0) 90 else 91, reason = "Because you liked Title ${if (i % 2 == 0) 90 else 91}")
+        if (i in 6..8) r.copy(title = r.title.copy(year = 2026)) else r
+    }
 
     @Test
     fun homeDark() = shoot("home_dark") { home() }
@@ -55,22 +82,120 @@ class ScreenshotTest {
 
     @Composable
     private fun home() {
-        val (hero, sections) = buildSections(feed)
-        HomeContent(HomeUiState(hero = hero, sections = sections, firstLoad = false, hasContent = true), {}, {}, {}, {}, {})
+        ForYouContent(HomeUiState(items = feed, firstLoad = false, hasContent = true), HomeActions())
+    }
+
+    @Test
+    fun browse() = shoot("browse") {
+        BrowseContent(
+            HomeUiState(items = feed, sections = buildSections(feed, 2026, heroSize = 0).second, firstLoad = false, hasContent = true),
+            HomeActions(),
+        )
     }
 
     @Test
     fun homeLoading() = shoot("home_loading") {
-        HomeContent(HomeUiState(), {}, {}, {}, {}, {})
+        ForYouContent(HomeUiState(), HomeActions())
     }
 
     @Test
-    fun onboarding() = shoot("onboarding") {
-        val titles = (1..8).map { title(it, genre = listOf("Drama", "Comedy", "Sci-Fi")[it % 3]) }
-        OnboardingContent(
-            OnboardingUiState(loading = false, titles = titles, ratings = mapOf(titles[0].key to Signal.LIKE, titles[2].key to Signal.DISLIKE)),
-            { _, _ -> }, {}, {},
+    fun circleMenu() = shoot("circle_menu") {
+        val state = remember {
+            RadialMenuState().apply {
+                open(RadialRequest(title(3), titleOptions(title(3), saved = true, onOpen = {}, onRate = { _, _ -> }, onToggleSaved = {})), haptics = null)
+            }
+        }
+        Box(Modifier.fillMaxSize()) {
+            ForYouContent(HomeUiState(items = feed, firstLoad = false, hasContent = true), HomeActions())
+            RadialMenuHost(state)
+        }
+        LaunchedEffect(Unit) { state.move(Offset(state.center.x + 200f, state.center.y - 60f)) }
+    }
+
+    private val watched = (1..9).map { title(it, genre = listOf("Drama", "Comedy", "Sci-Fi")[it % 3]) }
+
+    @Test
+    fun quizWatched() = shoot("quiz_1_watched") {
+        QuizContent(
+            QuizUiState(
+                loadingPool = false, pool = watched,
+                watched = watched.take(4).associateBy { it.key }, loved = setOf(watched[1].key),
+            ),
+            QuizActions(),
         )
+    }
+
+    @Test
+    fun quizGenres() = shoot("quiz_2_genres") {
+        QuizContent(
+            QuizUiState(
+                step = QuizStep.GENRES, loadingPool = false,
+                genres = mapOf("science fiction" to GenreChoice.LOVE, "thriller" to GenreChoice.LOVE, "horror" to GenreChoice.AVOID),
+            ),
+            QuizActions(),
+        )
+    }
+
+    @Test
+    fun quizPrefs() = shoot("quiz_3_prefs") {
+        QuizContent(QuizUiState(step = QuizStep.PREFS, loadingPool = false, languages = setOf("en", "hi")), QuizActions())
+    }
+
+    @Test
+    fun quizReview() = shoot("quiz_4_review", dark = false) {
+        QuizContent(
+            QuizUiState(
+                step = QuizStep.REVIEW, loadingPool = false, watched = watched.take(5).associateBy { it.key },
+                loved = setOf(watched[0].key), genres = mapOf("crime" to GenreChoice.LOVE), languages = setOf("hi"),
+            ),
+            QuizActions(),
+        )
+    }
+
+    @Test
+    fun person() = shoot("person") {
+        PersonContent(
+            PersonUiState(
+                loading = false,
+                person = com.reelwise.app.data.model.PersonDetail(
+                    id = 500, name = "Dee Rector", department = "Directing", birthday = "1970-01-01", placeOfBirth = "Lahore, Pakistan",
+                    biography = "A director known for patient, character-driven films. ".repeat(4),
+                    knownFor = (20..25).map { title(it) },
+                    credits = (20..27).map { com.reelwise.app.data.model.PersonCredit(title(it), if (it % 3 == 0) "Hero" else "Director", if (it % 3 == 0) com.reelwise.app.data.model.CreditKind.ACTED else com.reelwise.app.data.model.CreditKind.DIRECTED) },
+                ),
+                rated = setOf(title(22).key),
+            ),
+            {}, {}, {},
+        )
+    }
+
+    @Test
+    fun learnedTaste() = shoot("learned-taste") {
+        LearnedTasteCard(
+            LearnedTaste(
+                genres = mapOf("Crime" to 0.62, "Mystery" to 0.41, "Drama" to 0.2, "Horror" to -0.55, "Romance" to -0.18),
+                languages = mapOf("ko" to 0.35, "en" to 0.1),
+                decades = mapOf(2010 to 0.33),
+                types = mapOf(MediaType.TV to 0.5, MediaType.MOVIE to 0.1),
+                evidence = 37,
+            ),
+            onForgetQuietSignals = {},
+        )
+    }
+
+    @Test
+    fun accountSignedOut() = shoot("account-signed-out") {
+        GoogleAccountContent(SyncState(), {}, {}, {})
+    }
+
+    @Test
+    fun accountSignedIn() = shoot("account-signed-in") {
+        GoogleAccountContent(SyncState(account = GoogleAccount("aakash@example.com", "Aakash Saleem", 1_700_000_000_000)), {}, {}, {})
+    }
+
+    @Test
+    fun keys() = shoot("keys") {
+        KeysContent(KeysUiState(tmdbKey = "abcdef123456"), {}, {}, {}, null, {})
     }
 
     @Test
@@ -102,7 +227,8 @@ class ScreenshotTest {
                     tagline = "Some journeys change everything.",
                     runtime = 148,
                     trailerYoutubeKey = "abc",
-                    cast = listOf(CastMember("Ada Actor", "Lead"), CastMember("Ben Bitpart", "Friend")),
+                    cast = listOf(CastMember("Ada Actor", "Lead", id = 600), CastMember("Ben Bitpart", "Friend", id = 601)),
+                    crew = listOf(com.reelwise.app.data.model.CrewMember(500, "Dee Rector", "Director")),
                     providers = Providers(stream = listOf(Provider("StreamCo")), rent = listOf(Provider("RentIt"), Provider("Shop"))),
                     similar = (10..14).map { title(it) },
                 ),

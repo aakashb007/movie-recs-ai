@@ -34,7 +34,7 @@ fun MessageState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
+        Icon(icon, null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(48.dp))
         Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
         Text(
             body,

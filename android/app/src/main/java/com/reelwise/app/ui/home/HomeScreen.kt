@@ -1,13 +1,22 @@
 package com.reelwise.app.ui.home
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,19 +24,28 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PageSize
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CloudOff
-import androidx.compose.material.icons.rounded.MoreHoriz
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.LightMode
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.ThumbDown
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -35,259 +53,367 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.util.lerp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.reelwise.app.data.model.FeedFilter
 import com.reelwise.app.data.model.RecItem
+import com.reelwise.app.data.model.Signal
+import com.reelwise.app.data.model.TitleKey
 import com.reelwise.app.data.model.TitleSummary
-import com.reelwise.app.ui.components.ArtworkImage
 import com.reelwise.app.ui.components.ErrorState
-import com.reelwise.app.ui.components.FeedSkeleton
-import com.reelwise.app.ui.components.PosterCard
-import com.reelwise.app.ui.components.RatingPill
-import com.reelwise.app.ui.components.SectionHeader
+import com.reelwise.app.ui.components.MessageState
+import com.reelwise.app.ui.components.PaletteImage
 import com.reelwise.app.ui.components.Tmdb
-import com.reelwise.app.ui.components.bottomScrim
+import com.reelwise.app.ui.components.formatRating
 import com.reelwise.app.ui.components.metaLine
+import com.reelwise.app.ui.components.shimmer
 import com.reelwise.app.ui.components.spokenDescription
-import com.reelwise.app.ui.theme.Eyebrow
+import com.reelwise.app.ui.navigation.navClearance
+import com.reelwise.app.ui.radial.radialMenu
+import com.reelwise.app.ui.radial.RadialRequest
+import com.reelwise.app.ui.radial.titleOptions
+import com.reelwise.app.ui.theme.BrandRed
+import com.reelwise.app.ui.theme.PosterType
+import kotlin.math.absoluteValue
+
+/** Callbacks for the For you and Browse screens, bundled so previews and tests pass one object. */
+data class HomeActions(
+    val onFilter: (FeedFilter) -> Unit = {},
+    val onRefresh: () -> Unit = {},
+    val onOpenTitle: (TitleSummary) -> Unit = {},
+    val onRateMore: () -> Unit = {},
+    val onSearch: () -> Unit = {},
+    val onToggleTheme: () -> Unit = {},
+    val onToggleSaved: (TitleSummary) -> Unit = {},
+    val onRate: (TitleSummary, Signal) -> Unit = { _, _ -> },
+    /** Swiped on from a For you card: a quiet "not this one" the taste model learns from. */
+    val onSwipedPast: (TitleSummary) -> Unit = {},
+) {
+    fun menuFor(title: TitleSummary, saved: Boolean) =
+        RadialRequest(title, titleOptions(title, saved, onOpenTitle, onRate, onToggleSaved))
+}
+
+@Composable
+fun rememberHomeActions(viewModel: HomeViewModel, onOpenTitle: (TitleSummary) -> Unit, onRateMore: () -> Unit, onSearch: () -> Unit): HomeActions {
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    return remember(viewModel, dark) {
+        HomeActions(
+            onFilter = viewModel::setFilter,
+            onRefresh = { viewModel.refresh() },
+            onOpenTitle = onOpenTitle,
+            onRateMore = onRateMore,
+            onSearch = onSearch,
+            onToggleTheme = { viewModel.toggleTheme(dark) },
+            onToggleSaved = viewModel::toggleWatchlist,
+            onRate = { t, s -> viewModel.rate(t, s) },
+            onSwipedPast = viewModel::swipedPast,
+        )
+    }
+}
 
 @Composable
 fun HomeRoute(
     onOpenTitle: (TitleSummary) -> Unit,
     onRateMore: () -> Unit,
+    onSearch: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var sheetFor by remember { mutableStateOf<TitleSummary?>(null) }
-    HomeContent(
-        state = state,
-        onFilter = viewModel::setFilter,
-        onRefresh = { viewModel.refresh() },
-        onOpenTitle = onOpenTitle,
-        onMore = { sheetFor = it },
-        onRateMore = onRateMore,
-    )
-    sheetFor?.let { title ->
-        val inWatchlist by remember(title) { viewModel.isInWatchlist(title) }.collectAsStateWithLifecycle(false)
-        QuickActionsSheet(
-            title = title,
-            inWatchlist = inWatchlist,
-            onSignal = { signal -> viewModel.rate(title, signal) },
-            onToggleWatchlist = { viewModel.toggleWatchlist(title) },
-            onDismiss = { sheetFor = null },
-        )
-    }
+    ForYouContent(state, rememberHomeActions(viewModel, onOpenTitle, onRateMore, onSearch))
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** "For you": every pick as one big poster, swiped left and right. Hold a poster for the circle menu. */
 @Composable
-fun HomeContent(
-    state: HomeUiState,
-    onFilter: (FeedFilter) -> Unit,
-    onRefresh: () -> Unit,
-    onOpenTitle: (TitleSummary) -> Unit,
-    onMore: (TitleSummary) -> Unit,
-    onRateMore: () -> Unit,
-) {
-    PullToRefreshBox(
-        isRefreshing = state.refreshing && state.hasContent,
-        onRefresh = onRefresh,
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+fun ForYouContent(state: HomeUiState, actions: HomeActions) {
+    val pager = rememberPagerState { state.items.size }
+    val latestItems by rememberUpdatedState(state.items)
+    LaunchedEffect(pager) {
+        var last = pager.settledPage
+        snapshotFlow { pager.settledPage }.collect { page ->
+            if (page > last) latestItems.getOrNull(last)?.let { actions.onSwipedPast(it.title) }
+            last = page
+        }
+    }
+    val tints = remember { mutableStateMapOf<TitleKey, Color>() }
+    val current = state.items.getOrNull(pager.currentPage)
+    val background = MaterialTheme.colorScheme.background
+    val dark = background.luminance() < 0.5f
+    val raw = current?.let { tints[it.title.key] ?: fallbackTint(it.title.key) } ?: background
+    // The screen takes on the front poster's colour: deep in dark mode, a pale wash in light mode.
+    val tint by animateColorAsState(
+        if (current == null) background
+        else if (dark) raw.copy(alpha = 0.6f).compositeOver(Color.Black) else raw.copy(alpha = 0.18f).compositeOver(Color.White),
+        tween(700),
+        label = "tint",
+    )
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Brush.verticalGradient(0f to tint, 0.75f to tint.copy(alpha = 0.85f).compositeOver(background), 1f to background)),
     ) {
-        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp), modifier = Modifier.fillMaxSize()) {
-            item(key = "header") { Header(state.filter, onFilter) }
+        Column(Modifier.fillMaxSize().statusBarsPadding().padding(bottom = navClearance())) {
+            TopBar(state, actions, title = null)
             when {
-                !state.hasContent && state.error != null -> item(key = "error") { ErrorState(state.error, onRefresh) }
-                !state.hasContent && (state.firstLoad || state.refreshing) -> item(key = "skeleton") { FeedSkeleton() }
-                !state.hasContent -> item(key = "empty") {
-                    com.reelwise.app.ui.components.MessageState(
-                        Icons.Rounded.AutoAwesome,
-                        "You've seen it all",
-                        "Every pick here has been rated. Pull to refresh for a new batch.",
-                        actionLabel = "Refresh",
-                        onAction = onRefresh,
+                state.items.isEmpty() && state.error != null -> ErrorState(state.error, actions.onRefresh)
+                state.items.isEmpty() && (state.firstLoad || state.refreshing) -> BigCardSkeleton(Modifier.weight(1f))
+                state.items.isEmpty() -> MessageState(
+                    Icons.Rounded.AutoAwesome,
+                    "You've seen it all",
+                    "Every pick here has been rated. Refresh for a new batch.",
+                    actionLabel = "Refresh",
+                    onAction = actions.onRefresh,
+                )
+                else -> {
+                    if (state.coldStart) {
+                        TextButton(onClick = actions.onRateMore, modifier = Modifier.padding(horizontal = 8.dp)) {
+                            Text("These are crowd favourites. Take the taste quiz to make them yours →")
+                        }
+                    }
+                    state.error?.let { OfflineNote(it, actions.onRefresh) }
+                    BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                        val cardHeight = minOf(maxHeight * 0.96f, maxWidth * 0.72f * 1.5f)
+                        val cardWidth = cardHeight / 1.5f
+                        HorizontalPager(
+                            state = pager,
+                            pageSize = PageSize.Fixed(cardWidth),
+                            contentPadding = PaddingValues(horizontal = (maxWidth - cardWidth) / 2),
+                            pageSpacing = -(cardWidth * 0.1f),
+                            beyondViewportPageCount = 2,
+                            modifier = Modifier.fillMaxSize(),
+                        ) { page ->
+                            val item = state.items[page]
+                            BigCard(
+                                item = item,
+                                pager = pager,
+                                page = page,
+                                height = cardHeight,
+                                onTint = { tints[item.title.key] = it },
+                                onClick = { actions.onOpenTitle(item.title) },
+                                menu = { actions.menuFor(item.title, item.title.key in state.saved) },
+                            )
+                        }
+                    }
+                    current?.let { item ->
+                        AnimatedContent(
+                            targetState = item,
+                            transitionSpec = { (fadeIn(tween(280)) + slideInVertically(tween(280)) { it / 6 }).togetherWith(fadeOut(tween(140))) },
+                            contentKey = { it.title.key },
+                            label = "card-text",
+                        ) { shown -> CardText(shown, shown.title.key in state.saved, actions) }
+                    }
+                    Text(
+                        "${pager.currentPage + 1} / ${state.items.size}  ·  hold a poster for quick actions",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 4.dp),
                     )
                 }
-                else -> {
-                    if (state.error != null) item(key = "offline") { OfflineBanner(state.error, onRefresh) }
-                    if (state.coldStart) item(key = "cold") { ColdStartBanner(onRateMore) }
-                    item(key = "hero") { HeroCarousel(state.hero, onOpenTitle, onMore) }
-                    state.sections.forEach { section ->
-                        item(key = "section-${section.eyebrow}-${section.title}") {
-                            Spacer(Modifier.height(28.dp))
-                            SectionHeader(section.eyebrow, section.title)
-                            Spacer(Modifier.height(12.dp))
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                items(section.items, key = { "${it.title.mediaType}-${it.title.id}" }) { item ->
-                                    PosterCard(
-                                        title = item.title,
-                                        reason = item.reason.takeIf { section.eyebrow == null },
-                                        onClick = { onOpenTitle(item.title) },
-                                        onLongPress = { onMore(item.title) },
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
             }
         }
     }
 }
 
 @Composable
-private fun Header(filter: FeedFilter, onFilter: (FeedFilter) -> Unit) {
-    Column(Modifier.statusBarsPadding().padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp)) {
-        Text("For you", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(FeedFilter.ALL to "All", FeedFilter.MOVIES to "Movies", FeedFilter.SERIES to "Series").forEach { (f, label) ->
-                FilterChip(selected = filter == f, onClick = { onFilter(f) }, label = { Text(label) })
+fun TopBar(state: HomeUiState, actions: HomeActions, title: String?, modifier: Modifier = Modifier) {
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    Column(modifier.padding(top = 8.dp)) {
+        Row(Modifier.padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (title == null) {
+                Text(
+                    "REELWISE",
+                    style = PosterType.copy(fontSize = 26.sp, letterSpacing = 1.sp),
+                    color = BrandRed,
+                    modifier = Modifier.weight(1f).semantics { heading() },
+                )
+            } else {
+                Text(title, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.weight(1f).semantics { heading() })
             }
-        }
-    }
-}
-
-@Composable
-private fun HeroCarousel(items: List<RecItem>, onOpen: (TitleSummary) -> Unit, onMore: (TitleSummary) -> Unit) {
-    if (items.isEmpty()) return
-    val pager = rememberPagerState { items.size }
-    Column {
-        HorizontalPager(
-            state = pager,
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            pageSpacing = 12.dp,
-        ) { page ->
-            HeroCard(items[page], page + 1, onOpen, onMore)
+            IconButton(onClick = actions.onRefresh) { Icon(Icons.Rounded.Refresh, contentDescription = "Refresh picks") }
+            IconButton(onClick = actions.onSearch) { Icon(Icons.Rounded.Search, contentDescription = "Ask Reelwise") }
+            IconButton(onClick = actions.onToggleTheme) {
+                Icon(
+                    if (dark) Icons.Rounded.LightMode else Icons.Rounded.DarkMode,
+                    contentDescription = if (dark) "Switch to light theme" else "Switch to dark theme",
+                )
+            }
         }
         Row(
-            Modifier.fillMaxWidth().padding(top = 12.dp),
-            horizontalArrangement = Arrangement.Center,
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            repeat(items.size) { i ->
-                val selected = pager.currentPage == i
-                Box(
-                    Modifier
-                        .padding(horizontal = 3.dp)
-                        .size(width = if (selected) 18.dp else 6.dp, height = 6.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                        ),
-                )
+            FILTERS.forEach { (f, label) ->
+                FilterChip(selected = state.filter == f, onClick = { actions.onFilter(f) }, label = { Text(label) })
             }
         }
     }
 }
 
+val FILTERS = listOf(
+    FeedFilter.ALL to "All",
+    FeedFilter.MOVIES to "Movies",
+    FeedFilter.SERIES to "Series",
+    FeedFilter.FEEL_GOOD to "Feel-good",
+    FeedFilter.CLASSICS to "Classics",
+)
+
+/** A colour from a title's id, until the poster loads and Palette gives the real one. */
+private fun fallbackTint(key: TitleKey): Color {
+    val hues = listOf(0xFF6B4320, 0xFF1C3348, 0xFF5A2440, 0xFF2B5E52, 0xFF3E4A8A, 0xFF7A2A22)
+    return Color(hues[(key.id + key.mediaType.ordinal).mod(hues.size)])
+}
+
 @Composable
-private fun HeroCard(item: RecItem, rank: Int, onOpen: (TitleSummary) -> Unit, onMore: (TitleSummary) -> Unit) {
-    val title = item.title
-    Surface(
-        onClick = { onOpen(title) },
-        shape = RoundedCornerShape(28.dp),
-        modifier = Modifier
+private fun BigCard(
+    item: RecItem,
+    pager: PagerState,
+    page: Int,
+    height: androidx.compose.ui.unit.Dp,
+    onTint: (Color) -> Unit,
+    onClick: () -> Unit,
+    menu: () -> RadialRequest,
+) {
+    val offset = (pager.currentPage - page) + pager.currentPageOffsetFraction
+    val distance = offset.absoluteValue.coerceIn(0f, 1f)
+    Box(
+        Modifier
             .fillMaxWidth()
-            .aspectRatio(4f / 5f)
-            .semantics { contentDescription = "Top pick $rank. " + title.spokenDescription(item.reason) },
+            .height(height)
+            .graphicsLayer {
+                val scale = lerp(1f, 0.82f, distance)
+                scaleX = scale
+                scaleY = scale
+                rotationZ = offset.coerceIn(-1.5f, 1.5f) * 5f
+                alpha = lerp(1f, 0.5f, distance)
+            }
+            .shadow(if (distance < 0.5f) 24.dp else 0.dp, RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(24.dp))
+            .clickable(onClickLabel = "Open details", onClick = onClick)
+            .radialMenu(menu)
+            .semantics {
+                contentDescription = item.title.spokenDescription(item.reason)
+                role = Role.Button
+            },
     ) {
-        Box {
-            ArtworkImage(
-                Tmdb.poster(title.posterPath, "w780") ?: Tmdb.backdrop(title.backdropPath),
-                title.title,
-                Modifier.fillMaxSize(),
-            )
-            Box(Modifier.fillMaxSize().bottomScrim(Color(0xFF0E0D12)))
-            RatingPill(title.voteAverage, Modifier.align(Alignment.TopStart).padding(14.dp))
-            IconButton(
-                onClick = { onMore(title) },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(8.dp)
-                    .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.45f)),
+        PaletteImage(Tmdb.poster(item.title.posterPath, "w780"), item.title.title, onTint, Modifier.fillMaxSize())
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = distance * 0.45f)))
+        item.title.imdbRating?.let { ImdbBadge(it, Modifier.align(Alignment.TopStart).padding(12.dp)) }
+    }
+}
+
+@Composable
+fun ImdbBadge(rating: Double, modifier: Modifier = Modifier) {
+    Surface(modifier = modifier, shape = RoundedCornerShape(6.dp), color = Color(0xFFF5C518), contentColor = Color.Black) {
+        Row(Modifier.padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("IMDb", style = MaterialTheme.typography.labelSmall.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Black))
+            Spacer(Modifier.width(4.dp))
+            Text(formatRating(rating), style = MaterialTheme.typography.labelMedium)
+        }
+    }
+}
+
+@Composable
+private fun CardText(item: RecItem, saved: Boolean, actions: HomeActions) {
+    val title = item.title
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            title.title,
+            style = PosterType.copy(fontSize = 30.sp, lineHeight = 32.sp),
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title.metaLine(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (title.voteAverage > 0 && title.imdbRating == null) {
+                Spacer(Modifier.width(8.dp))
+                Icon(Icons.Rounded.Star, null, tint = Color(0xFFFFC857), modifier = Modifier.size(14.dp))
+                Text(formatRating(title.voteAverage), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        if (item.reason.isNotBlank()) {
+            Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.AutoAwesome, null, tint = BrandRed, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(item.reason, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Button(
+                onClick = { actions.onOpenTitle(title) },
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.onBackground,
+                    contentColor = MaterialTheme.colorScheme.background,
+                ),
+                modifier = Modifier.weight(1f).height(46.dp),
             ) {
-                Icon(Icons.Rounded.MoreHoriz, contentDescription = "More actions for ${title.title}", tint = Color.White)
+                Icon(Icons.Rounded.Info, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Details")
             }
-            Column(Modifier.align(Alignment.BottomStart).padding(20.dp)) {
-                Text("TOP PICK #$rank", style = Eyebrow, color = Color(0xFFFFB547))
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    title.title,
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = Color.White,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(title.metaLine(), style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.8f))
-                if (item.reason.isNotBlank()) {
-                    Spacer(Modifier.height(10.dp))
-                    Surface(shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.16f), contentColor = Color.White) {
-                        Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Rounded.AutoAwesome, null, modifier = Modifier.size(14.dp), tint = Color(0xFFFFB547))
-                            Spacer(Modifier.width(6.dp))
-                            Text(item.reason, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
-                }
+            FilledTonalButton(
+                onClick = { actions.onToggleSaved(title) },
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.weight(1f).height(46.dp),
+            ) {
+                Icon(if (saved) Icons.Rounded.Check else Icons.Rounded.Add, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(if (saved) "On my list" else "My list")
+            }
+            FilledTonalIconButton(
+                onClick = { actions.onRate(title, Signal.DISLIKE) },
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.size(46.dp),
+            ) {
+                Icon(Icons.Rounded.ThumbDown, contentDescription = "Not for me")
             }
         }
     }
 }
 
 @Composable
-private fun ColdStartBanner(onRateMore: () -> Unit) {
-    Surface(
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        shape = RoundedCornerShape(20.dp),
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-    ) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("These are crowd favourites", style = MaterialTheme.typography.titleSmall)
-                Text("Like a few titles and this page becomes yours.", style = MaterialTheme.typography.bodySmall)
-            }
-            FilledTonalButton(onClick = onRateMore) { Text("Rate titles") }
-        }
+private fun BigCardSkeleton(modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth().semantics { contentDescription = "Loading recommendations" }, contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth(0.7f).height(420.dp).clip(RoundedCornerShape(24.dp)).shimmer())
     }
 }
 
 @Composable
-private fun OfflineBanner(message: String, onRetry: () -> Unit) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-    ) {
-        Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.CloudOff, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(10.dp))
-            Text(
-                "Showing saved picks. $message",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = onRetry) { Text("Retry") }
-        }
+private fun OfflineNote(message: String, onRetry: () -> Unit) {
+    Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Rounded.CloudOff, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("Saved picks. $message", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), maxLines = 2)
+        TextButton(onClick = onRetry) { Text("Retry") }
     }
 }

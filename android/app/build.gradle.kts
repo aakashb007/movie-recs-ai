@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -7,8 +9,6 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.roborazzi)
 }
-
-val apiBaseUrl: String = providers.gradleProperty("apiBaseUrl").get()
 
 android {
     namespace = "com.reelwise.app"
@@ -20,17 +20,41 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
-        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // One fixed key for every build, so new APKs install over old ones and Google sign-in (which
+    // trusts this key's SHA-1) keeps working. Read from environment variables (CI) or, for local
+    // builds, local.properties; never committed. Without it, builds use the local debug key.
+    val localProps = Properties().apply {
+        rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+    }
+    fun signingValue(env: String, prop: String): String? =
+        System.getenv(env)?.takeIf { it.isNotBlank() } ?: localProps.getProperty(prop)?.takeIf { it.isNotBlank() }
+    val keystorePath = signingValue("REELWISE_KEYSTORE_FILE", "reelwise.storeFile") ?: "reelwise.jks"
+    val keystore = file(keystorePath)
+    val storePass = signingValue("REELWISE_KEYSTORE_PASSWORD", "reelwise.storePassword")
+    val fixedKey = keystore.exists() && storePass != null
+    signingConfigs {
+        if (fixedKey) {
+            create("reelwise") {
+                storeFile = keystore
+                storePassword = storePass
+                keyAlias = signingValue("REELWISE_KEY_ALIAS", "reelwise.keyAlias") ?: "reelwise"
+                keyPassword = signingValue("REELWISE_KEY_PASSWORD", "reelwise.keyPassword") ?: storePass
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName(if (fixedKey) "reelwise" else "debug")
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Signed with the debug key so CI can produce an installable APK; use a real keystore for the Play Store.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (fixedKey) "reelwise" else "debug")
         }
     }
 
@@ -84,12 +108,13 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
-    implementation(libs.retrofit)
-    implementation(libs.retrofit.kotlinx.serialization)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.coil.compose)
+    implementation(libs.palette)
+    implementation(libs.play.services.auth)
+    implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.datastore.preferences)
     implementation(libs.work.runtime)
 
