@@ -34,6 +34,7 @@ class TasteLearnerTest {
         currentYear = { 2024 },
     )
 
+    // learn() rounds affinities to 3 decimals, hence the 1e-3 tolerances.
     @Test
     fun likesAndDislikesBecomeSignedGenreAffinities() {
         val learned = TasteLearner.learn(
@@ -46,8 +47,8 @@ class TasteLearnerTest {
             ),
             emptyMap(), emptySet(), now,
         )
-        assertEquals(0.6, learned.genres.getValue("Crime"), 1e-9) // 3 / (3 + prior 2)
-        assertEquals(-4.0 / 6.0, learned.genres.getValue("Horror"), 1e-9) // "not for me" counts double
+        assertEquals(0.6, learned.genres.getValue("Crime"), 1e-3) // 3 / (3 + prior 2), rounded to 3 decimals
+        assertEquals(-4.0 / 6.0, learned.genres.getValue("Horror"), 1e-3) // "not for me" counts double; affinities are rounded to 3 decimals
         assertEquals(5, learned.evidence)
     }
 
@@ -60,7 +61,7 @@ class TasteLearnerTest {
             listOf(Evidence(f(1, "Drama"), TasteLearner.LIKE, now - 240 * day)), // two half-lives ago
             emptyMap(), emptySet(), now,
         )
-        assertEquals(0.25 / 2.25, old.genres.getValue("Drama"), 1e-9)
+        assertEquals(0.25 / 2.25, old.genres.getValue("Drama"), 1e-3)
     }
 
     @Test
@@ -83,9 +84,9 @@ class TasteLearnerTest {
             listOf(Evidence(f(1, "Horror", lang = "ko", year = 2012), TasteLearner.NOT_INTERESTED, now, genreOnly = true)),
             emptyMap(), emptySet(), now,
         )
-        assertEquals(-1.0 / 3.0, learned.genres.getValue("Horror"), 1e-9)
-        assertEquals(-0.25 / 2.25, learned.languages.getValue("ko"), 1e-9)
-        assertEquals(-0.25 / 2.25, learned.decades.getValue(2010), 1e-9)
+        assertEquals(-1.0 / 3.0, learned.genres.getValue("Horror"), 1e-3)
+        assertEquals(-0.25 / 2.25, learned.languages.getValue("ko"), 1e-3)
+        assertEquals(-0.25 / 2.25, learned.decades.getValue(2010), 1e-3)
     }
 
     @Test
