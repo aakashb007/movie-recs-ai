@@ -10,7 +10,7 @@ import kotlinx.serialization.Serializable
 
 /**
  * Everything Reelwise backs up to the person's Google Drive: ratings, watchlist and taste.
- * API keys are deliberately not in here; they never leave the phone.
+ * API keys are only included when the person opts in (Profile → Google account).
  */
 @Serializable
 data class BackupData(
@@ -19,7 +19,11 @@ data class BackupData(
     val settings: BackupSettings,
     val interactions: List<BackupInteraction> = emptyList(),
     val watchlist: List<BackupWatch> = emptyList(),
+    val keys: BackupKeys? = null,
 )
+
+@Serializable
+data class BackupKeys(val tmdb: String = "", val groq: String = "", val omdb: String = "")
 
 @Serializable
 data class BackupSettings(
@@ -79,5 +83,8 @@ fun mergeBackups(local: BackupData, remote: BackupData?): BackupData {
         .map { (_, versions) -> versions.maxBy { it.addedAt } }
         .sortedBy { it.addedAt }
     val settings = if (!local.settings.onboardingDone && remote.settings.onboardingDone) remote.settings else local.settings
-    return BackupData(exportedAt = maxOf(local.exportedAt, remote.exportedAt), settings = settings, interactions = interactions, watchlist = watchlist)
+    return BackupData(
+        exportedAt = maxOf(local.exportedAt, remote.exportedAt), settings = settings,
+        interactions = interactions, watchlist = watchlist, keys = local.keys,
+    )
 }

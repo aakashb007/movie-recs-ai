@@ -14,7 +14,8 @@ import kotlinx.coroutines.flow.map
 
 /**
  * The person's own TMDB, Groq and OMDb keys. Kept in their own DataStore file ("secrets"), which the
- * backup rules leave out, so the keys never leave the phone in a cloud backup or device transfer.
+ * backup rules leave out, so the keys never leave the phone in Android's cloud backup or a device
+ * transfer. They go to the person's Google Drive only if they opt in (SyncManager).
  */
 @Singleton
 class KeyStore @Inject constructor(@Named("secrets") private val store: DataStore<Preferences>) : KeyProvider {
@@ -23,6 +24,11 @@ class KeyStore @Inject constructor(@Named("secrets") private val store: DataStor
     override suspend fun tmdbKey(): String? = store.data.first()[TMDB]
     override suspend fun groqKey(): String? = store.data.first()[GROQ]
     override suspend fun omdbKey(): String? = store.data.first()[OMDB]
+
+    /** All three keys at once; blank when unset. */
+    suspend fun all(): Triple<String, String, String> = store.data.first().let {
+        Triple(it[TMDB].orEmpty(), it[GROQ].orEmpty(), it[OMDB].orEmpty())
+    }
 
     suspend fun save(tmdb: String, groq: String?, omdb: String?) {
         store.edit {

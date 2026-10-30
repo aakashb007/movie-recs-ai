@@ -78,6 +78,9 @@ interface WatchlistDao {
 
     @Query("DELETE FROM watchlist WHERE id = :id AND mediaType = :mediaType")
     suspend fun delete(id: Int, mediaType: MediaType)
+
+    @Query("DELETE FROM watchlist")
+    suspend fun clear()
 }
 
 @Dao

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -22,18 +24,24 @@ android {
     }
 
     // One fixed key for every build, so new APKs install over old ones and Google sign-in (which
-    // trusts this key's SHA-1) keeps working. CI writes it from the REELWISE_KEYSTORE_B64 secret;
-    // without it (a fresh clone) builds fall back to the local debug key.
-    val keystore = file("reelwise.jks")
-    val keystorePassword = System.getenv("REELWISE_KEYSTORE_PASSWORD")
-    val fixedKey = keystore.exists() && !keystorePassword.isNullOrEmpty()
+    // trusts this key's SHA-1) keeps working. Read from environment variables (CI) or, for local
+    // builds, local.properties; never committed. Without it, builds use the local debug key.
+    val localProps = Properties().apply {
+        rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+    }
+    fun signingValue(env: String, prop: String): String? =
+        System.getenv(env)?.takeIf { it.isNotBlank() } ?: localProps.getProperty(prop)?.takeIf { it.isNotBlank() }
+    val keystorePath = signingValue("REELWISE_KEYSTORE_FILE", "reelwise.storeFile") ?: "reelwise.jks"
+    val keystore = file(keystorePath)
+    val storePass = signingValue("REELWISE_KEYSTORE_PASSWORD", "reelwise.storePassword")
+    val fixedKey = keystore.exists() && storePass != null
     signingConfigs {
         if (fixedKey) {
             create("reelwise") {
                 storeFile = keystore
-                storePassword = keystorePassword
-                keyAlias = "reelwise"
-                keyPassword = keystorePassword
+                storePassword = storePass
+                keyAlias = signingValue("REELWISE_KEY_ALIAS", "reelwise.keyAlias") ?: "reelwise"
+                keyPassword = signingValue("REELWISE_KEY_PASSWORD", "reelwise.keyPassword") ?: storePass
             }
         }
     }

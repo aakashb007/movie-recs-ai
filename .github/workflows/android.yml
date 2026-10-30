@@ -34,7 +34,10 @@ jobs:
           REELWISE_KEYSTORE_B64: ${{ secrets.REELWISE_KEYSTORE_B64 }}
           REELWISE_KEYSTORE_PASSWORD: ${{ secrets.REELWISE_KEYSTORE_PASSWORD }}
         run: |
-          if [ -n "$REELWISE_KEYSTORE_B64" ]; then echo "$REELWISE_KEYSTORE_B64" | base64 -d > app/reelwise.jks; fi
+          if [ -n "$REELWISE_KEYSTORE_B64" ]; then
+            echo "$REELWISE_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/reelwise.jks"
+            export REELWISE_KEYSTORE_FILE="$RUNNER_TEMP/reelwise.jks"
+          fi
           ./gradlew --no-daemon assembleDebug assembleRelease
       - name: Upload APKs
         uses: actions/upload-artifact@v4

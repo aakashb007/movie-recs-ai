@@ -52,6 +52,11 @@ class SettingsStore @Inject constructor(
         if (name == null) it.remove(GOOGLE_NAME) else it[GOOGLE_NAME] = name
     }
 
+    /** Opt-in: also put the API keys in the Drive backup. Off unless the person turns it on. */
+    val backupKeys: Flow<Boolean> = store.data.map { it[BACKUP_KEYS] ?: false }
+
+    suspend fun setBackupKeys(enabled: Boolean) = store.edit { it[BACKUP_KEYS] = enabled }
+
     suspend fun setLastSynced(at: Long) = store.edit { it[LAST_SYNC] = at }
 
     suspend fun clearAccount() = store.edit {
@@ -74,6 +79,7 @@ class SettingsStore @Inject constructor(
         val TASTE = stringPreferencesKey("taste_profile")
         val GOOGLE_EMAIL = stringPreferencesKey("google_email")
         val GOOGLE_NAME = stringPreferencesKey("google_name")
+        val BACKUP_KEYS = booleanPreferencesKey("backup_api_keys")
         val LAST_SYNC = androidx.datastore.preferences.core.longPreferencesKey("last_synced_at")
 
         fun defaultRegion(): String =

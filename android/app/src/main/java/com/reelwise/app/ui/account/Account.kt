@@ -21,16 +21,21 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.CloudSync
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +49,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import android.text.format.DateUtils
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
 import com.reelwise.app.data.sync.GoogleDriveAuth
 import com.reelwise.app.data.sync.GoogleGrant
 import com.reelwise.app.data.sync.SyncManager
@@ -70,6 +77,14 @@ class AccountViewModel @Inject constructor(
         viewModelScope.launch { sync.upload() }
     }
 
+    fun restore() {
+        viewModelScope.launch { sync.restore() }
+    }
+
+    fun includeKeys(enabled: Boolean) {
+        viewModelScope.launch { sync.setIncludeKeys(enabled) }
+    }
+
     fun signOut() {
         viewModelScope.launch { sync.signOut() }
     }
@@ -87,8 +102,11 @@ class AccountViewModel @Inject constructor(
 fun rememberGoogleSignIn(auth: GoogleDriveAuth, onGrant: (GoogleGrant) -> Unit, onError: (String) -> Unit): () -> Unit {
     val scope = rememberCoroutineScope()
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
-        val grant = runCatching { auth.resultFromIntent(result.data).grant() }.getOrNull()
-        if (grant != null) onGrant(grant) else onError("Google sign-in was cancelled.")
+        try {
+            auth.resultFromIntent(result.data).grant()?.let(onGrant) ?: onError("Google sign-in was cancelled.")
+        } catch (e: Exception) {
+            onError(signInError(e))
+        }
     }
     return {
         scope.launch {
@@ -103,23 +121,56 @@ fun rememberGoogleSignIn(auth: GoogleDriveAuth, onGrant: (GoogleGrant) -> Unit, 
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // Usually: no Android OAuth client for this app's package and signing key in Google Cloud.
-                onError("Google sign-in isn't set up for this app yet (${e.message ?: e.javaClass.simpleName}).")
+                onError(signInError(e))
             }
         }
     }
+}
+
+/** A readable reason for a failed sign-in. */
+fun signInError(e: Exception): String = when ((e as? ApiException)?.statusCode) {
+    // Google found no Android OAuth client for this package + signing-key SHA-1.
+    CommonStatusCodes.DEVELOPER_ERROR ->
+        "APK not signed with the registered key. Install the release APK from GitHub (debug builds can't sign in)."
+    CommonStatusCodes.NETWORK_ERROR -> "No internet connection. Connect and try again."
+    CommonStatusCodes.CANCELED -> "Google sign-in was cancelled."
+    else -> "Google sign-in failed (${e.message ?: e.javaClass.simpleName})."
 }
 
 @Composable
 fun GoogleAccountCard(viewModel: AccountViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val signIn = rememberGoogleSignIn(viewModel.auth, viewModel::connected, viewModel::failed)
-    GoogleAccountContent(state, onSignIn = signIn, onSyncNow = viewModel::syncNow, onSignOut = viewModel::signOut)
+    GoogleAccountContent(
+        state,
+        onSignIn = signIn,
+        onSyncNow = viewModel::syncNow,
+        onSignOut = viewModel::signOut,
+        onRestore = viewModel::restore,
+        onIncludeKeys = viewModel::includeKeys,
+    )
 }
 
 @Composable
-fun GoogleAccountContent(state: SyncState, onSignIn: () -> Unit, onSyncNow: () -> Unit, onSignOut: () -> Unit) {
+fun GoogleAccountContent(
+    state: SyncState,
+    onSignIn: () -> Unit,
+    onSyncNow: () -> Unit,
+    onSignOut: () -> Unit,
+    onRestore: () -> Unit = {},
+    onIncludeKeys: (Boolean) -> Unit = {},
+) {
     val account = state.account
+    var confirmRestore by remember { mutableStateOf(false) }
+    if (confirmRestore) {
+        AlertDialog(
+            onDismissRequest = { confirmRestore = false },
+            title = { Text("Restore from Google Drive?") },
+            text = { Text("Your ratings, My list and taste profile on this phone will be replaced by the copy in your Drive.") },
+            confirmButton = { TextButton(onClick = { confirmRestore = false; onRestore() }) { Text("Restore") } },
+            dismissButton = { TextButton(onClick = { confirmRestore = false }) { Text("Cancel") } },
+        )
+    }
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -135,7 +186,7 @@ fun GoogleAccountContent(state: SyncState, onSignIn: () -> Unit, onSyncNow: () -
                 }
                 Text(
                     "Back up ratings, My list and your taste profile to a private folder in your own Google Drive. " +
-                        "Restore everything on a new phone. Your API keys stay on this phone.",
+                        "Restore everything on a new phone. API keys stay on this phone unless you choose otherwise.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 6.dp, bottom = 12.dp),
@@ -168,10 +219,26 @@ fun GoogleAccountContent(state: SyncState, onSignIn: () -> Unit, onSyncNow: () -
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 10.dp),
                 )
+                if (state.needsSignIn) {
+                    Spacer(Modifier.height(10.dp))
+                    GoogleButton(busy = state.busy, onClick = onSignIn, label = "Sign in again")
+                }
                 Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = onSyncNow, enabled = !state.busy) { Text("Back up now") }
-                    TextButton(onClick = onSignOut) { Text("Sign out") }
+                    OutlinedButton(onClick = { confirmRestore = true }, enabled = !state.busy) { Text("Restore from Drive") }
                 }
+                Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Include API keys in backup", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "Off: keys stay only on this phone. On: TMDB, Groq and OMDb keys are saved in your private Drive folder too.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = state.includeKeys, onCheckedChange = onIncludeKeys)
+                }
+                TextButton(onClick = onSignOut, modifier = Modifier.padding(top = 4.dp)) { Text("Sign out") }
             }
             AnimatedVisibility(state.message != null) {
                 Text(

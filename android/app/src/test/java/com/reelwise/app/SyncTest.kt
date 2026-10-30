@@ -6,6 +6,8 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.reelwise.app.data.local.InteractionEntity
+import com.reelwise.app.data.local.KeyStore
+import com.reelwise.app.data.local.WatchlistEntity
 import com.reelwise.app.data.local.ReelwiseDatabase
 import com.reelwise.app.data.local.SettingsStore
 import com.reelwise.app.data.local.ThemeMode
@@ -15,6 +17,7 @@ import com.reelwise.app.data.model.Signal
 import com.reelwise.app.data.model.TasteProfile
 import com.reelwise.app.data.sync.BackupData
 import com.reelwise.app.data.sync.BackupInteraction
+import com.reelwise.app.data.sync.BackupKeys
 import com.reelwise.app.data.sync.BackupSettings
 import com.reelwise.app.data.sync.BackupWatch
 import com.reelwise.app.data.sync.DriveClient
@@ -86,11 +89,13 @@ class SyncTest {
     private val settingsFile = File(context.filesDir, "sync-${System.nanoTime()}.preferences_pb")
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val settings = SettingsStore(PreferenceDataStoreFactory.create { settingsFile }, json)
+    private val keysFile = File(context.filesDir, "keys-${System.nanoTime()}.preferences_pb")
+    private val keys = KeyStore(PreferenceDataStoreFactory.create { keysFile })
     private val drive = FakeDrive()
     private var grant: GoogleGrant? = GoogleGrant("good", "aakash@example.com", "Aakash")
     private var now = 1_000L
     private val sync = SyncManager(
-        db, settings, DriveClient(drive.client(), json),
+        db, settings, keys, DriveClient(drive.client(), json),
         object : DriveTokens { override suspend fun silentGrant() = grant },
         json,
     ) { now++ }
@@ -99,6 +104,7 @@ class SyncTest {
     fun tearDown() {
         db.close()
         settingsFile.delete()
+        keysFile.delete()
     }
 
     private fun backupIn(drive: FakeDrive, data: BackupData) {
@@ -173,5 +179,54 @@ class SyncTest {
         grant = GoogleGrant("expired", "aakash@example.com", null)
         assertTrue(sync.connect(grant!!).isFailure)
         assertNull(drive.files.values.firstOrNull())
+    }
+
+    @Test
+    fun apiKeysAreLeftOutUnlessThePersonOptsIn() = runTest {
+        keys.save("tmdb-secret", "groq-secret", null)
+        sync.connect(grant!!)
+        assertNull(stored().keys)
+        assertFalse(drive.files.values.single().contains("tmdb-secret"))
+
+        sync.setIncludeKeys(true)
+        sync.upload()
+        assertEquals(BackupKeys("tmdb-secret", "groq-secret", ""), stored().keys)
+    }
+
+    @Test
+    fun restoreReplacesThisPhonesDataWithDrive() = runTest {
+        db.interactions().upsert(InteractionEntity(1, MediaType.MOVIE, Signal.LIKE, "Only on phone", null, 10))
+        db.watchlist().upsert(WatchlistEntity(2, MediaType.MOVIE, "Phone list", null, null, 0.0, 11))
+        settings.setAccount("aakash@example.com", null)
+        backupIn(drive, BackupData(
+            exportedAt = 500,
+            settings = BackupSettings("IN", onboardingDone = true),
+            interactions = listOf(BackupInteraction(7, MediaType.TV, Signal.SEEN, "Show 7", null, 5)),
+            keys = BackupKeys("tmdb-from-drive"),
+        ))
+
+        assertTrue(sync.restore().isSuccess)
+        assertEquals(listOf(7), db.interactions().getAll().map { it.id })
+        assertTrue(db.watchlist().getAll().isEmpty())
+        assertEquals("IN", settings.settings.first().region)
+        assertEquals("tmdb-from-drive", keys.tmdbKey())
+        assertTrue(settings.settings.first().onboardingDone)
+        assertEquals("Restored from Google Drive", sync.state.value.message)
+    }
+
+    @Test
+    fun restoreWithNoBackupChangesNothing() = runTest {
+        db.interactions().upsert(InteractionEntity(1, MediaType.MOVIE, Signal.LIKE, "Film 1", null, 10))
+        sync.restore()
+        assertEquals(listOf(1), db.interactions().getAll().map { it.id })
+        assertEquals("There's no Reelwise backup in this Google account yet.", sync.state.value.message)
+    }
+
+    @Test
+    fun anExpiredGrantAsksToSignInAgain() = runTest {
+        grant = null
+        sync.restore()
+        assertTrue(sync.state.value.needsSignIn)
+        assertTrue(drive.requests.isEmpty())
     }
 }

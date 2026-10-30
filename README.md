@@ -107,19 +107,30 @@ branch for a direct download.
 - **Details:** where to watch in your region (stream/free/rent/buy), trailer, cast, more like this.
 - **Watchlist** and **Profile** (region, Material You colours, clear taste profile).
 - Works offline from the last cached feed; refreshes in the background on Wi-Fi (WorkManager).
-- **Google sign-in (optional, Profile → Google account):** backs up ratings, watchlist and taste quiz
-  to a hidden app folder in your own Google Drive (`drive.appdata` scope; the app can't see your other
-  files) and restores them on a new phone. API keys are never backed up.
+- **Google sign-in (optional, Profile → Google account):** backs up ratings, My list, taste quiz and
+  settings to one file (`reelwise-backup.json`) in a hidden app folder of your own Google Drive
+  (`drive.appdata` scope; the app can't see your other files). Changes back up automatically a few
+  seconds later; there are also **Back up now** and **Restore from Drive** buttons. API keys are only
+  included if you turn on **Include API keys in backup**.
 
-### Setting up Google sign-in
-Google only lets an app sign in if it is registered in a Google Cloud project, and it checks the
-SHA-1 of the key the APK is signed with. So the APK needs one fixed signing key:
-1. Create a keystore (alias `reelwise`), then add two repository secrets: `REELWISE_KEYSTORE_B64`
-   (the file, base64-encoded) and `REELWISE_KEYSTORE_PASSWORD`. CI signs both APKs with it.
-2. Google Cloud Console → APIs & Services → enable the **Google Drive API**.
-3. OAuth consent screen: add the scope `.../auth/drive.appdata`; while in Testing, add yourself as a test user.
-4. Credentials → Create OAuth client ID → **Android**: package `com.reelwise.app` and the keystore's SHA-1
-   (`keytool -list -v -keystore reelwise.jks`).
+### Signed release APK and Google sign-in
+Google lets the app sign in only when the APK is signed with the key registered in the Google Cloud
+Android OAuth client (package `com.reelwise.app`, SHA-1
+`FD:CE:70:18:8B:FE:F4:F5:BF:BF:63:1C:37:66:F1:CF:B2:CA:FB:7A`). The workflow `release.yml` builds
+the release APK on every push to `main`, fails if the signature's SHA-1 differs, and publishes it as
+the `latest` GitHub Release.
+
+Signing values come from environment variables, or `android/local.properties` for local builds:
+
+| Environment variable | local.properties | |
+|---|---|---|
+| `REELWISE_KEYSTORE_FILE` | `reelwise.storeFile` | path to the .jks (CI decodes the `REELWISE_KEYSTORE_B64` secret) |
+| `REELWISE_KEYSTORE_PASSWORD` | `reelwise.storePassword` | secret of the same name |
+| `REELWISE_KEY_ALIAS` | `reelwise.keyAlias` | optional, default `reelwise` |
+| `REELWISE_KEY_PASSWORD` | `reelwise.keyPassword` | optional, default: the store password |
+
+Without them the build uses the local debug key, whose SHA-1 differs, so sign-in shows
+"APK not signed with the registered key". Keystores (`*.jks`, `*.keystore`) are git-ignored.
 
 ## Data and licences
 - This product uses the TMDB API but is not endorsed or certified by TMDB.
