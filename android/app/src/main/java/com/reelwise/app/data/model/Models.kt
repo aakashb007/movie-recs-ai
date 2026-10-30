@@ -38,6 +38,8 @@ data class TitleSummary(
     @SerialName("vote_count") val voteCount: Int = 0,
     val genres: List<String> = emptyList(),
     @SerialName("original_language") val originalLanguage: String? = null,
+    /** IMDb rating via OMDb, filled in only when an OMDb key is saved. */
+    @SerialName("imdb_rating") val imdbRating: Double? = null,
 ) {
     val key: TitleKey get() = TitleKey(id, mediaType)
 }
@@ -71,6 +73,8 @@ enum class Freshness {
     /** Released in the last 10 years. */
     @SerialName("recent") RECENT,
     @SerialName("any") ANY,
+    /** Old classics and cult films: released before 2000. */
+    @SerialName("classics") CLASSICS,
 }
 
 @Serializable
@@ -90,6 +94,8 @@ data class TasteProfile(
     val mix: Mix = Mix.BOTH,
     /** ISO 639-1 codes; empty means any language. */
     val languages: List<String> = emptyList(),
+    /** Minimum score out of 10: IMDb when an OMDb key is saved, TMDB otherwise. Null means any. */
+    @SerialName("min_rating") val minRating: Double? = null,
 )
 
 @Serializable
@@ -173,9 +179,28 @@ data class TitleDetail(
     @SerialName("trailer_youtube_key") val trailerYoutubeKey: String? = null,
     val providers: Providers = Providers(),
     val similar: List<TitleSummary> = emptyList(),
+    @SerialName("imdb_id") val imdbId: String? = null,
+    val imdb: ImdbScore? = null,
+)
+
+/** Scores OMDb reports for an IMDb title. */
+@Serializable
+data class ImdbScore(
+    val rating: Double,
+    val votes: Int? = null,
+    @SerialName("rotten_tomatoes") val rottenTomatoes: String? = null,
+    val metascore: Int? = null,
 )
 
 @Serializable
 data class OnboardingResponse(val items: List<TitleSummary>)
 
-enum class FeedFilter(val wire: String) { ALL("all"), MOVIES("movie"), SERIES("tv") }
+enum class FeedFilter(val wire: String) {
+    ALL("all"),
+    MOVIES("movie"),
+    SERIES("tv"),
+    /** Uplifting comedy, family, animation and romance; never horror, thrillers, war or crime. */
+    FEEL_GOOD("feelgood"),
+    /** Old classics and cult films, released before 2000. */
+    CLASSICS("classics"),
+}

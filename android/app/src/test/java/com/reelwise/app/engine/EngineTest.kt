@@ -20,15 +20,17 @@ import org.junit.Test
 
 /** The on-device engine end to end against a fake TMDB and Groq: the Kotlin twin of backend/tests/test_api.py. */
 class EngineTest {
-    private class Keys(var tmdb: String? = "test-key", var groq: String? = null) : KeyProvider {
+    private class Keys(var tmdb: String? = "test-key", var groq: String? = null, var omdb: String? = null) : KeyProvider {
         override suspend fun tmdbKey() = tmdb
         override suspend fun groqKey() = groq
+        override suspend fun omdbKey() = omdb
     }
 
     private fun api(services: FakeServices, keys: Keys = Keys(), year: Int = 2026): LocalReelwiseApi {
         val http = services.client()
         val tmdb = TmdbClient(http, keys, FakeServices.json)
-        return LocalReelwiseApi(tmdb, Recommender(tmdb) { year }, QueryParser(http, keys, FakeServices.json))
+        val imdb = OmdbImdbLookup(tmdb, OmdbClient(http, keys, FakeServices.json))
+        return LocalReelwiseApi(tmdb, Recommender(tmdb, imdb) { year }, QueryParser(http, keys, FakeServices.json), imdb)
     }
 
     private fun ids(items: List<RecItem>) = items.map { it.title.mediaType.wire to it.title.id }
@@ -177,5 +179,57 @@ class EngineTest {
         assertEquals(MediaType.MOVIE, grid[0].mediaType)
         assertEquals(MediaType.TV, grid[1].mediaType)
         assertEquals(listOf("Show 112"), api.search("show 112").map { it.title })
+    }
+
+    @Test
+    fun `feel-good shelf is uplifting genres only, never dark ones`() {
+        val body = recs(api(FakeServices()), listOf(like(2), like(3)), media = "feelgood", limit = 20) // liked horror and drama
+        assertTrue(body.items.isNotEmpty())
+        body.items.forEach {
+            assertTrue("${it.title.title}: ${it.title.genres}", it.title.genres.any { g -> g in setOf("Comedy", "Family", "Animation", "Romance", "Music", "Kids") })
+            assertTrue(it.title.genres.none { g -> g in setOf("Horror", "Thriller", "Crime", "War") })
+        }
+    }
+
+    @Test
+    fun `classics shelf only has titles from before 2000, and quiz classics does the same`() {
+        val api = api(FakeServices())
+        val shelf = recs(api, listOf(like(36)), media = "classics", limit = 20).items
+        assertTrue(shelf.isNotEmpty())
+        shelf.forEach { assertTrue("${it.title.title} is ${it.title.year}", it.title.year!! <= 1999) }
+        assertTrue(shelf.any { it.reason.contains("Classic") })
+
+        val quiz = recs(api, emptyList(), TasteProfile(lovedGenres = listOf("comedy"), freshness = Freshness.CLASSICS), limit = 20).items
+        assertTrue(quiz.isNotEmpty())
+        quiz.forEach { assertTrue(it.title.year!! <= 1999) }
+    }
+
+    @Test
+    fun `minimum rating uses TMDB without an OMDb key`() {
+        val body = recs(api(FakeServices()), listOf(like(1), like(6)), TasteProfile(minRating = 8.0), limit = 20)
+        assertTrue(body.items.isNotEmpty())
+        body.items.forEach { assertTrue(it.title.voteAverage >= 8.0) }
+        assertTrue(body.items.all { it.title.imdbRating == null })
+    }
+
+    @Test
+    fun `minimum rating uses IMDb when an OMDb key is saved`() {
+        // The fake IMDb rates even ids 8.4 and odd ids 6.1, regardless of TMDB.
+        val body = recs(api(FakeServices(), Keys(omdb = "omdb-key")), listOf(like(1), like(6)), TasteProfile(minRating = 8.0), limit = 20)
+        assertTrue(body.items.isNotEmpty())
+        body.items.forEach {
+            assertEquals(8.4, it.title.imdbRating!!, 0.0)
+            assertEquals(0, it.title.id % 2)
+        }
+    }
+
+    @Test
+    fun `details carry IMDb and Rotten Tomatoes when an OMDb key is saved`() = runBlocking {
+        val withKey = api(FakeServices(), Keys(omdb = "omdb-key")).title("movie", 8, "US")
+        assertEquals(8.4, withKey.imdb!!.rating, 0.0)
+        assertEquals(12345, withKey.imdb!!.votes)
+        assertEquals("88%", withKey.imdb!!.rottenTomatoes)
+        assertEquals("tt0000008", withKey.imdbId)
+        assertNull(api(FakeServices()).title("movie", 8, "US").imdb)
     }
 }

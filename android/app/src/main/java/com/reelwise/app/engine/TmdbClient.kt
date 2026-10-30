@@ -28,6 +28,9 @@ import okhttp3.Request
 interface KeyProvider {
     suspend fun tmdbKey(): String?
     suspend fun groqKey(): String?
+
+    /** Optional: an OMDb key unlocks IMDb ratings. */
+    suspend fun omdbKey(): String? = null
 }
 
 /** No TMDB key has been saved yet. */
@@ -119,7 +122,7 @@ class TmdbClient(
     }
 
     private suspend fun details(type: MediaType, id: Int): JsonObject =
-        get("/${type.wire}/$id", mapOf("append_to_response" to "watch/providers,recommendations,credits,videos,keywords"))
+        get("/${type.wire}/$id", mapOf("append_to_response" to "watch/providers,recommendations,credits,videos,keywords,external_ids"))
 
     suspend fun details(type: MediaType, id: Int, region: String): TitleDetail {
         val raw = details(type, id)
@@ -152,8 +155,21 @@ class TmdbClient(
             ),
             similar = raw.obj("recommendations")?.arr("results").orEmpty().take(12)
                 .mapNotNull { (it as? JsonObject)?.let { o -> summary(o, type) } },
+            imdbId = imdbIdOf(raw),
         )
     }
+
+    /** The IMDb id ("tt0133093"), from the same cached details call; null if TMDB doesn't know it. */
+    suspend fun imdbId(type: MediaType, id: Int): String? = try {
+        imdbIdOf(details(type, id))
+    } catch (e: TmdbAuthException) {
+        throw e
+    } catch (e: TmdbException) {
+        null
+    }
+
+    private fun imdbIdOf(raw: JsonObject): String? =
+        (raw.str("imdb_id") ?: raw.obj("external_ids")?.str("imdb_id"))?.takeIf { it.startsWith("tt") }
 
     suspend fun search(query: String): List<TitleSummary> {
         val body = get("/search/multi", mapOf("query" to query, "include_adult" to "false"))

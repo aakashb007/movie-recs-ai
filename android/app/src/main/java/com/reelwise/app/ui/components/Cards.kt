@@ -89,12 +89,15 @@ fun PosterCard(
     width: Dp = 132.dp,
     isNew: Boolean = false,
     onLongPress: (() -> Unit)? = null,
+    /** Gesture modifier for press-and-hold, e.g. Modifier.radialMenu { … }; it goes after the click handler. */
+    menu: Modifier = Modifier,
 ) {
     Column(
         modifier
             .width(width)
             .clip(RoundedCornerShape(16.dp))
             .combinedClickable(onClick = onClick, onLongClick = onLongPress)
+            .then(menu)
             .clearAndSetSemantics {
                 contentDescription = (if (isNew) "New. " else "") + title.spokenDescription(reason)
                 role = Role.Button

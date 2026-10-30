@@ -49,6 +49,8 @@ class AskViewModel @Inject constructor(private val repository: Repository) : Vie
     companion object {
         const val MAX_LENGTH = 300
         val SUGGESTIONS = listOf(
+            "Feel-good movies for tonight",
+            "Old cult classics",
             "Mind-bending sci-fi like Inception",
             "A cosy comedy series to binge",
             "90s crime thrillers, no horror",

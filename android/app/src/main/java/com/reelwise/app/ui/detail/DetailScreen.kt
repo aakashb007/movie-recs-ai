@@ -1,6 +1,7 @@
 package com.reelwise.app.ui.detail
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -199,6 +200,24 @@ private fun Body(
         }
         item(key = "actions") {
             Column(Modifier.offset(y = (-40).dp).padding(horizontal = 16.dp)) {
+                detail.imdb?.let { score ->
+                    Row(
+                        Modifier
+                            .padding(bottom = 12.dp)
+                            .then(detail.imdbId?.let { id -> Modifier.clickable(onClickLabel = "Open on IMDb") { onOpenUrl("https://www.imdb.com/title/$id/") } } ?: Modifier)
+                            .semantics(mergeDescendants = true) {},
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        com.reelwise.app.ui.home.ImdbBadge(score.rating)
+                        score.votes?.let {
+                            Text("${"%,d".format(java.util.Locale.US, it)} IMDb votes", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        score.rottenTomatoes?.let {
+                            Text("Rotten Tomatoes $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     detail.trailerYoutubeKey?.let { key ->
                         Button(onClick = { onOpenUrl("https://www.youtube.com/watch?v=$key") }) {

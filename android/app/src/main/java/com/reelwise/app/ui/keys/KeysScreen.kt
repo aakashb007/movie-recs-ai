@@ -68,6 +68,7 @@ fun KeysRoute(onDone: () -> Unit, onBack: (() -> Unit)?, viewModel: KeysViewMode
         state = state,
         onTmdb = viewModel::onTmdb,
         onGroq = viewModel::onGroq,
+        onOmdb = viewModel::onOmdb,
         onSave = viewModel::testAndSave,
         onBack = onBack,
         onOpenUrl = { runCatching { uri.openUri(it) } },
@@ -82,6 +83,7 @@ fun KeysContent(
     onSave: () -> Unit,
     onBack: (() -> Unit)?,
     onOpenUrl: (String) -> Unit,
+    onOmdb: (String) -> Unit = {},
 ) {
     Column(
         Modifier
@@ -108,7 +110,7 @@ fun KeysContent(
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            "Reelwise runs entirely on this phone. It talks to TMDB with your own free key, and optionally to Groq for typed requests.",
+            "Reelwise runs entirely on this phone. It talks to TMDB with your own free key, and optionally to Groq (typed requests) and OMDb (IMDb ratings).",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -129,9 +131,19 @@ fun KeysContent(
             value = state.groqKey,
             onChange = onGroq,
             supporting = "Makes Ask understand requests like \"Dark, but lighter\". Without it, Ask matches keywords.",
-            imeAction = ImeAction.Done,
+            imeAction = ImeAction.Next,
         )
         TextButton(onClick = { onOpenUrl("https://console.groq.com/keys") }) { Text("Get a free Groq key") }
+
+        Spacer(Modifier.height(8.dp))
+        KeyField(
+            label = "OMDb API key (optional)",
+            value = state.omdbKey,
+            onChange = onOmdb,
+            supporting = "Adds IMDb ratings and lets the rating filter use IMDb instead of TMDB.",
+            imeAction = ImeAction.Done,
+        )
+        TextButton(onClick = { onOpenUrl("https://www.omdbapi.com/apikey.aspx") }) { Text("Get a free OMDb key") }
 
         AnimatedVisibility(state.error != null, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
             Surface(

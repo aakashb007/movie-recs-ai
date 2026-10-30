@@ -18,8 +18,19 @@ import com.reelwise.app.ui.ask.AskContent
 import com.reelwise.app.ui.ask.AskUiState
 import com.reelwise.app.ui.detail.DetailContent
 import com.reelwise.app.ui.detail.DetailUiState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import com.reelwise.app.ui.home.BrowseContent
+import com.reelwise.app.ui.home.ForYouContent
 import com.reelwise.app.ui.home.HomeActions
-import com.reelwise.app.ui.home.HomeContent
+import com.reelwise.app.ui.radial.RadialMenuHost
+import com.reelwise.app.ui.radial.RadialMenuState
+import com.reelwise.app.ui.radial.RadialRequest
+import com.reelwise.app.ui.radial.titleOptions
 import com.reelwise.app.ui.home.HomeUiState
 import com.reelwise.app.ui.home.buildSections
 import com.reelwise.app.ui.keys.KeysContent
@@ -64,13 +75,34 @@ class ScreenshotTest {
 
     @Composable
     private fun home() {
-        val (hero, sections) = buildSections(feed, currentYear = 2026)
-        HomeContent(HomeUiState(hero = hero, sections = sections, firstLoad = false, hasContent = true), HomeActions())
+        ForYouContent(HomeUiState(items = feed, firstLoad = false, hasContent = true), HomeActions())
+    }
+
+    @Test
+    fun browse() = shoot("browse") {
+        BrowseContent(
+            HomeUiState(items = feed, sections = buildSections(feed, 2026, heroSize = 0).second, firstLoad = false, hasContent = true),
+            HomeActions(),
+        )
     }
 
     @Test
     fun homeLoading() = shoot("home_loading") {
-        HomeContent(HomeUiState(), HomeActions())
+        ForYouContent(HomeUiState(), HomeActions())
+    }
+
+    @Test
+    fun circleMenu() = shoot("circle_menu") {
+        val state = remember {
+            RadialMenuState().apply {
+                open(RadialRequest(title(3), titleOptions(title(3), saved = true, onOpen = {}, onRate = { _, _ -> }, onToggleSaved = {})), haptics = null)
+            }
+        }
+        Box(Modifier.fillMaxSize()) {
+            ForYouContent(HomeUiState(items = feed, firstLoad = false, hasContent = true), HomeActions())
+            RadialMenuHost(state)
+        }
+        LaunchedEffect(Unit) { state.move(Offset(state.center.x + 200f, state.center.y - 60f)) }
     }
 
     private val watched = (1..9).map { title(it, genre = listOf("Drama", "Comedy", "Sci-Fi")[it % 3]) }

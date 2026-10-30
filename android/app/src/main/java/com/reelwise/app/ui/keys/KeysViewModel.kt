@@ -3,6 +3,7 @@ package com.reelwise.app.ui.keys
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.reelwise.app.data.Repository
+import com.reelwise.app.data.SavedKeys
 import com.reelwise.app.data.userMessage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -15,6 +16,7 @@ import kotlinx.coroutines.launch
 data class KeysUiState(
     val tmdbKey: String = "",
     val groqKey: String = "",
+    val omdbKey: String = "",
     val checking: Boolean = false,
     val error: String? = null,
     val saved: Boolean = false,
@@ -31,13 +33,14 @@ class KeysViewModel @Inject constructor(private val repository: Repository) : Vi
 
     init {
         viewModelScope.launch {
-            val (tmdb, groq) = repository.savedKeys()
-            _state.update { it.copy(tmdbKey = tmdb.orEmpty(), groqKey = groq.orEmpty(), editing = !tmdb.isNullOrBlank()) }
+            val keys = repository.savedKeys()
+            _state.update { it.copy(tmdbKey = keys.tmdb, groqKey = keys.groq, omdbKey = keys.omdb, editing = keys.tmdb.isNotBlank()) }
         }
     }
 
     fun onTmdb(value: String) = _state.update { it.copy(tmdbKey = value.trim(), error = null, saved = false) }
     fun onGroq(value: String) = _state.update { it.copy(groqKey = value.trim(), error = null, saved = false) }
+    fun onOmdb(value: String) = _state.update { it.copy(omdbKey = value.trim(), error = null, saved = false) }
 
     /** Calls TMDB with the key; only a key TMDB accepts is saved. */
     fun testAndSave() {
@@ -45,7 +48,7 @@ class KeysViewModel @Inject constructor(private val repository: Repository) : Vi
         if (!s.canSave) return
         _state.update { it.copy(checking = true, error = null) }
         viewModelScope.launch {
-            repository.saveKeys(s.tmdbKey, s.groqKey.ifBlank { null })
+            repository.saveKeys(SavedKeys(s.tmdbKey, s.groqKey, s.omdbKey))
                 .onSuccess { _state.update { it.copy(checking = false, saved = true) } }
                 .onFailure { e -> _state.update { it.copy(checking = false, error = e.userMessage()) } }
         }

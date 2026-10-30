@@ -65,6 +65,13 @@ class FakeServices(
     private fun handle(req: Request): Response {
         requests += req
         val url = req.url
+        if (url.host == "www.omdbapi.com") {
+            val id = url.queryParameter("i").orEmpty().removePrefix("tt").toIntOrNull() ?: return respond(req, 200, """{"Response":"False"}""")
+            // Even ids rate 8.4 on IMDb, odd ones 6.1, whatever TMDB says.
+            val rating = if (id % 2 == 0) "8.4" else "6.1"
+            return respond(req, 200, """{"Response":"True","imdbRating":"$rating","imdbVotes":"12,345","Metascore":"77",
+                "Ratings":[{"Source":"Rotten Tomatoes","Value":"88%"}]}""")
+        }
         if (url.host == "api.groq.com") {
             if (groqStatus != 200) return respond(req, groqStatus, """{"error":"boom"}""")
             val body = buildJsonObject {
@@ -99,6 +106,8 @@ class FakeServices(
                 putJsonObject("credits") { putJsonArray("cast") { add(buildJsonObject { put("name", "Ada Actor"); put("character", "Lead") }) } }
                 putJsonObject("recommendations") { putJsonArray("results") {} }
                 if (m.groupValues[1] == "movie") put("runtime", 120)
+                val imdb = "tt" + m.groupValues[2].padStart(7, '0')
+                if (m.groupValues[1] == "movie") put("imdb_id", imdb) else putJsonObject("external_ids") { put("imdb_id", imdb) }
             }
             return respond(req, 200, detail.toString())
         }
@@ -109,7 +118,8 @@ class FakeServices(
                 .map { (k, v) -> buildJsonObject { v.forEach { (a, b) -> put(a, b) }; put("media_type", k.first) } })
         }
         if (path == "/search/keyword") {
-            return list(req, if (p("query") == "time travel") listOf(buildJsonObject { put("id", 999); put("name", "time travel") }) else emptyList())
+            val ids = mapOf("time travel" to 999, "feel-good" to 1001, "cult film" to 1002)
+            return list(req, ids[p("query")]?.let { listOf(buildJsonObject { put("id", it); put("name", p("query")) }) } ?: emptyList())
         }
         Regex("/discover/(movie|tv)").matchEntire(path)?.let { m ->
             val type = m.groupValues[1]
@@ -121,6 +131,7 @@ class FakeServices(
             p("$field.gte")?.let { lo -> rows = rows.filter { it[dateKey].toString().trim('"') >= lo } }
             p("$field.lte")?.let { hi -> rows = rows.filter { it[dateKey].toString().trim('"') <= hi } }
             p("with_original_language")?.let { l -> rows = rows.filter { it["original_language"].toString().trim('"') == l } }
+            p("vote_average.gte")?.let { v -> rows = rows.filter { it["vote_average"].toString().toDouble() >= v.toDouble() } }
             return list(req, rows.take(20))
         }
         return respond(req, 404, "{}")

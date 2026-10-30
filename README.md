@@ -84,7 +84,8 @@ cd android
 
 On first launch the app asks for your **TMDB key** (free at themoviedb.org → Settings → API;
 a v3 key or a v4 read access token both work) and checks it with TMDB before saving. The
-**Groq key** is optional and only makes Ask smarter. Keys are stored in their own DataStore
+**Groq key** is optional and only makes Ask smarter. The **OMDb key** is optional too and adds
+IMDb ratings (TMDB itself has none). Keys are stored in their own DataStore
 file on the phone, which the backup rules leave out, and can be changed in Profile → API keys.
 
 CI builds both APKs on every push and also publishes the release APK to the `apk-<branch>`
@@ -94,9 +95,13 @@ branch for a direct download.
 - **Taste quiz (4 steps):** tick everything you've already watched (search covers all of TMDB) and
   heart the ones you loved; love or ban genres; choose how new, movies or series, and languages;
   review and save. Watched titles are never suggested; loved ones seed "because you loved".
-- **For you:** a hero carousel of top picks, then rows titled by their reason ("Because you liked …").
-  Long-press any poster to say Loved it / Not for me / Seen it / Not interested; the title disappears at once
-  and the list re-ranks a moment later.
+- **For you:** every pick as one big poster; swipe left and right. **Browse** has the same picks in rows
+  titled by their reason ("Because you loved …"), fresh releases and series.
+- **Circle menu:** press and hold any poster, slide onto a petal (the phone ticks on each one) and let go:
+  Details, Loved it, My list, Seen it, Not for me, Not interested. The app behind it blurs.
+- **Feel-good** and **Classics** chips: uplifting comedy/family/animation/romance (never horror or thrillers),
+  or films from before 2000 including cult favourites, still ranked by your taste.
+- **Minimum rating** (quiz): IMDb when you add a free OMDb key (Profile → API keys), otherwise TMDB.
 - **Ask:** type a mood or a comparison. The app shows how it read your request
   (genres, exclusions, decade, "Like Dark") so a wrong reading is visible.
 - **Details:** where to watch in your region (stream/free/rent/buy), trailer, cast, more like this.

@@ -36,7 +36,7 @@ class HomeViewModelTest {
         advanceUntilIdle()
         val s = vm.state.value
         assertEquals(listOf(FeedFilter.ALL), repo.refreshCalls)
-        assertEquals(5, s.hero.size)
+        assertEquals(12, s.items.size)
         assertEquals("Title 100", s.sections.first().title)
         assertEquals("BECAUSE YOU LOVED", s.sections.first().eyebrow)
         assertFalse(s.firstLoad)
@@ -49,7 +49,7 @@ class HomeViewModelTest {
         backgroundScope.launch { vm.state.collect() }
         advanceUntilIdle()
         assertTrue(repo.refreshCalls.isEmpty())
-        assertEquals(5, vm.state.value.hero.size)
+        assertEquals(12, vm.state.value.items.size)
     }
 
     @Test
@@ -57,10 +57,10 @@ class HomeViewModelTest {
         val vm = vm()
         backgroundScope.launch { vm.state.collect() }
         advanceUntilIdle()
-        val first = vm.state.value.hero.first().title
+        val first = vm.state.value.items.first().title
         vm.rate(first, Signal.DISMISS)
         advanceTimeBy(100)
-        assertFalse(vm.state.value.hero.any { it.title.key == first.key })
+        assertFalse(vm.state.value.items.any { it.title.key == first.key })
         assertEquals(1, repo.refreshCalls.size) // not yet: debounced
         advanceUntilIdle()
         assertEquals(2, repo.refreshCalls.size)

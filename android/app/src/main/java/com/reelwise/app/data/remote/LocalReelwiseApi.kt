@@ -8,6 +8,7 @@ import com.reelwise.app.data.model.RecommendationRequest
 import com.reelwise.app.data.model.RecommendationResponse
 import com.reelwise.app.data.model.TitleDetail
 import com.reelwise.app.data.model.TitleSummary
+import com.reelwise.app.engine.ImdbLookup
 import com.reelwise.app.engine.QueryParser
 import com.reelwise.app.engine.Recommender
 import com.reelwise.app.engine.TmdbClient
@@ -17,6 +18,7 @@ class LocalReelwiseApi(
     private val tmdb: TmdbClient,
     private val recommender: Recommender,
     private val parser: QueryParser,
+    private val imdb: ImdbLookup? = null,
 ) : ReelwiseApi {
     override suspend fun onboarding() = OnboardingResponse(recommender.onboarding())
 
@@ -31,8 +33,12 @@ class LocalReelwiseApi(
         return AskResponse(intent, refs, items, parsedBy)
     }
 
-    override suspend fun title(type: String, id: Int, region: String): TitleDetail =
-        tmdb.details(if (type == MediaType.TV.wire) MediaType.TV else MediaType.MOVIE, id, region)
+    override suspend fun title(type: String, id: Int, region: String): TitleDetail {
+        val mediaType = if (type == MediaType.TV.wire) MediaType.TV else MediaType.MOVIE
+        val detail = tmdb.details(mediaType, id, region)
+        val score = if (imdb != null && imdb.available()) imdb.score(mediaType, id) else null
+        return if (score == null) detail else detail.copy(imdb = score, summary = detail.summary.copy(imdbRating = score.rating))
+    }
 
     override suspend fun search(query: String): List<TitleSummary> = recommender.search(query)
 }

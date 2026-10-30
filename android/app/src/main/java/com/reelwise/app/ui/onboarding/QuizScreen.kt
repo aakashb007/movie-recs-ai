@@ -52,6 +52,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
@@ -108,6 +109,7 @@ data class QuizActions(
     val onFreshness: (Freshness) -> Unit = {},
     val onMix: (Mix) -> Unit = {},
     val onLanguage: (String?) -> Unit = {},
+    val onMinRating: (Double?) -> Unit = {},
     val onGoTo: (QuizStep) -> Unit = {},
     val onBack: () -> Unit = {},
     val onNext: () -> Unit = {},
@@ -124,7 +126,7 @@ fun QuizRoute(onFinished: () -> Unit, viewModel: QuizViewModel = hiltViewModel()
         QuizActions(
             onQuery = viewModel::onQuery, onKind = viewModel::setKind, onToggleWatched = viewModel::toggleWatched,
             onToggleLoved = viewModel::toggleLoved, onCycleGenre = viewModel::cycleGenre, onFreshness = viewModel::setFreshness,
-            onMix = viewModel::setMix, onLanguage = viewModel::toggleLanguage, onGoTo = viewModel::goTo, onBack = viewModel::back,
+            onMix = viewModel::setMix, onLanguage = viewModel::toggleLanguage, onMinRating = viewModel::setMinRating, onGoTo = viewModel::goTo, onBack = viewModel::back,
             onNext = viewModel::next, onRetry = viewModel::loadPool, onRestart = viewModel::restart, onFinished = onFinished,
         ),
     )
@@ -408,7 +410,8 @@ private fun PrefsStep(state: QuizUiState, actions: QuizActions) {
         listOf(
             Triple(Freshness.LATEST, "Latest releases", "Out in the last 2 years"),
             Triple(Freshness.RECENT, "Fairly recent", "The last 10 years"),
-            Triple(Freshness.ANY, "Any era", "Classics welcome too"),
+            Triple(Freshness.ANY, "Any era", "New and old, whatever fits"),
+            Triple(Freshness.CLASSICS, "Classics & cult", "Before 2000: old favourites and cult films"),
         ).forEach { (value, label, hint) ->
             val selected = state.freshness == value
             Surface(
@@ -454,6 +457,23 @@ private fun PrefsStep(state: QuizUiState, actions: QuizActions) {
                 }
             }
         }
+        SectionLabel("MINIMUM RATING")
+        Text(
+            "IMDb rating when you add an OMDb key in Settings, otherwise TMDB's.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            QuizUiState.RATINGS.forEach { r ->
+                FilterChip(
+                    selected = state.minRating == r,
+                    onClick = { actions.onMinRating(r) },
+                    label = { Text(ratingLabel(r)) },
+                    leadingIcon = if (r != null) ({ Icon(Icons.Rounded.Star, null, modifier = Modifier.size(16.dp)) }) else null,
+                )
+            }
+        }
         SectionLabel("LANGUAGES YOU WATCH IN")
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = state.languages.isEmpty(), onClick = { actions.onLanguage(null) }, label = { Text("Any language") })
@@ -463,6 +483,11 @@ private fun PrefsStep(state: QuizUiState, actions: QuizActions) {
         }
         Spacer(Modifier.height(12.dp))
     }
+}
+
+fun ratingLabel(r: Double?): String = when (r) {
+    null -> "Any"
+    else -> (if (r % 1.0 == 0.0) r.toInt().toString() else r.toString()) + "+"
 }
 
 @Composable
@@ -482,6 +507,7 @@ private fun ReviewStep(state: QuizUiState, actions: QuizActions) {
         Freshness.LATEST -> "Latest releases"
         Freshness.RECENT -> "Fairly recent"
         Freshness.ANY -> "Any era"
+        Freshness.CLASSICS -> "Classics & cult"
     }
     val mix = when (state.mix) {
         Mix.BOTH -> "Movies and series"
@@ -512,7 +538,8 @@ private fun ReviewStep(state: QuizUiState, actions: QuizActions) {
         }
         ReviewCard("GENRES YOU LOVE", onEdit = { actions.onGoTo(QuizStep.GENRES) }) { Text(genreLabel(state.lovedGenres).ifEmpty { "None picked" }) }
         ReviewCard("NEVER SHOW", onEdit = { actions.onGoTo(QuizStep.GENRES) }) { Text(genreLabel(state.avoidedGenres).ifEmpty { "Nothing excluded" }) }
-        ReviewCard("PREFERENCES", onEdit = { actions.onGoTo(QuizStep.PREFS) }) { Text("$freshness · $mix · $languages") }
+        val rating = state.minRating?.let { "Rated ${ratingLabel(it)}" } ?: "Any rating"
+        ReviewCard("PREFERENCES", onEdit = { actions.onGoTo(QuizStep.PREFS) }) { Text("$freshness · $mix · $languages · $rating") }
     }
 }
 

@@ -6,6 +6,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.reelwise.app.data.DefaultRepository
+import com.reelwise.app.data.SavedKeys
 import com.reelwise.app.data.local.KeyStore
 import com.reelwise.app.data.local.ReelwiseDatabase
 import com.reelwise.app.data.local.SettingsStore
@@ -90,15 +91,15 @@ class RepositoryTest {
     @Test
     fun keysAreCheckedWithTmdbBeforeSavingAndStayOutOfSettings() = runTest {
         services.tmdbStatus = 401
-        val rejected = repo.saveKeys("bad-key", null)
+        val rejected = repo.saveKeys(SavedKeys("bad-key"))
         assertTrue(rejected.isFailure)
         assertEquals("Your TMDB key was rejected. Check it in Settings.", rejected.exceptionOrNull()!!.userMessage())
         assertFalse(repo.hasTmdbKey.first())
 
         services.tmdbStatus = 200
-        assertTrue(repo.saveKeys("  good-key ", "gsk_123").isSuccess)
+        assertTrue(repo.saveKeys(SavedKeys("  good-key ", "gsk_123", "omdb_1")).isSuccess)
         assertTrue(repo.hasTmdbKey.first())
-        assertEquals("good-key" to "gsk_123", repo.savedKeys())
+        assertEquals(SavedKeys("good-key", "gsk_123", "omdb_1"), repo.savedKeys())
         assertEquals("good-key", services.requests.last().url.queryParameter("api_key"))
         // The keys live in their own file, which the backup rules leave out.
         assertFalse(settingsFile.exists() && settingsFile.readText(Charsets.ISO_8859_1).contains("good-key"))

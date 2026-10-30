@@ -26,8 +26,14 @@ import com.reelwise.app.ui.ask.interpretationChips
 import com.reelwise.app.ui.detail.DetailContent
 import com.reelwise.app.ui.detail.DetailUiState
 import com.reelwise.app.data.model.Freshness
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.ui.geometry.Offset
+import com.reelwise.app.data.model.FeedFilter
+import com.reelwise.app.data.model.TitleSummary
+import com.reelwise.app.ui.home.BrowseContent
+import com.reelwise.app.ui.home.ForYouContent
 import com.reelwise.app.ui.home.HomeActions
-import com.reelwise.app.ui.home.HomeContent
 import com.reelwise.app.ui.home.HomeUiState
 import com.reelwise.app.ui.home.buildSections
 import com.reelwise.app.ui.keys.KeysContent
@@ -38,7 +44,12 @@ import com.reelwise.app.ui.onboarding.QuizContent
 import com.reelwise.app.ui.onboarding.QuizStep
 import com.reelwise.app.ui.onboarding.QuizUiState
 import com.reelwise.app.ui.theme.ReelwiseTheme
+import com.reelwise.app.ui.radial.RadialMenuState
+import com.reelwise.app.ui.radial.RadialOption
+import com.reelwise.app.ui.radial.RadialRequest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -92,7 +103,7 @@ class ScreensUiTest {
         }
         compose.onNodeWithText("Comedy").assertExists()
         compose.onNodeWithText("Horror").assertExists()
-        compose.onNodeWithText("Latest releases · Movies and series · Hindi").assertExists()
+        compose.onNodeWithText("Latest releases · Movies and series · Hindi · Any rating").assertExists()
         compose.onNodeWithContentDescription("Edit genres you love").performClick()
         assertEquals(QuizStep.GENRES, editedTo)
         compose.onNodeWithText("Looks good, save").assertIsEnabled()
@@ -112,23 +123,52 @@ class ScreensUiTest {
     }
 
     @Test
-    fun homeShowsExplanationsAndColdStartPrompt() {
-        val (hero, sections) = buildSections((1..12).map { rec(it, because = 99) }, currentYear = 2026)
+    fun forYouShowsOneBigPosterAtATimeWithItsReason() {
+        val items = (1..12).map { rec(it, because = 99) }
+        var opened: TitleSummary? = null
         var rateMore = 0
         compose.setContent {
             ReelwiseTheme {
-                HomeContent(
-                    state = HomeUiState(hero = hero, sections = sections, coldStart = true, firstLoad = false, hasContent = true),
-                    actions = HomeActions(onRateMore = { rateMore++ }),
+                ForYouContent(
+                    HomeUiState(items = items, coldStart = true, firstLoad = false, hasContent = true),
+                    HomeActions(onOpenTitle = { opened = it }, onRateMore = { rateMore++ }),
                 )
             }
         }
-        compose.onNodeWithContentDescription("Title 1, 2001", substring = true).assertExists()
-        // Every card here shares one reason, so it appears in several visible hero pages; the row heading is unique.
-        compose.onNodeWithText("BECAUSE YOU LOVED").assertExists()
-        compose.onAllNodesWithText("Because you liked Title 99", substring = true).onFirst().assertExists()
-        compose.onNodeWithText("Take quiz").performClick()
+        compose.onNodeWithText("1 / 12", substring = true).assertExists()
+        compose.onNodeWithText("Because you liked Title 99").assertExists()
+        compose.onNodeWithText("Details").performClick()
+        assertEquals(1, opened?.id)
+        compose.onNodeWithText("Take the taste quiz", substring = true).performClick()
         assertEquals(1, rateMore)
+    }
+
+    @Test
+    fun browseShowsRowsTitledByTheirReason() {
+        val items = (1..12).map { rec(it, because = 99) }
+        compose.setContent {
+            ReelwiseTheme {
+                BrowseContent(
+                    HomeUiState(items = items, sections = buildSections(items, 2026, heroSize = 0).second, firstLoad = false, hasContent = true),
+                    HomeActions(),
+                )
+            }
+        }
+        compose.onNodeWithText("BECAUSE YOU LOVED").assertExists()
+        compose.onNodeWithText("Title 99").assertExists()
+        compose.onNodeWithContentDescription("Title 1, 2001", substring = true).assertExists()
+    }
+
+    @Test
+    fun theFilterRowOffersFeelGoodAndClassics() {
+        var picked: FeedFilter? = null
+        compose.setContent {
+            ReelwiseTheme { ForYouContent(HomeUiState(firstLoad = false), HomeActions(onFilter = { picked = it })) }
+        }
+        compose.onNodeWithText("Feel-good").performClick()
+        assertEquals(FeedFilter.FEEL_GOOD, picked)
+        compose.onNodeWithText("Classics").performClick()
+        assertEquals(FeedFilter.CLASSICS, picked)
     }
 
     @Test
@@ -136,7 +176,7 @@ class ScreensUiTest {
         var retries = 0
         compose.setContent {
             ReelwiseTheme {
-                HomeContent(
+                ForYouContent(
                     state = HomeUiState(error = "Add your TMDB key in Settings", firstLoad = false),
                     actions = HomeActions(onRefresh = { retries++ }),
                 )
@@ -145,6 +185,30 @@ class ScreensUiTest {
         compose.onNodeWithText("Add your TMDB key in Settings").assertExists()
         compose.onNodeWithText("Try again").performClick()
         assertEquals(1, retries)
+    }
+
+    @Test
+    fun circleMenuPicksThePetalUnderTheFingerAndClosesInTheMiddle() {
+        val state = RadialMenuState()
+        val picked = mutableListOf<String>()
+        val options = listOf("A", "B", "C", "D").map { label -> RadialOption(label, Icons.Rounded.Star, { picked += label }) }
+        state.open(RadialRequest(title(1), options), haptics = null)
+        state.center = Offset(500f, 500f)
+        state.innerRadius = 100f
+        assertEquals(-1, state.segmentAt(Offset(520f, 510f))) // the middle
+        assertEquals(0, state.segmentAt(Offset(500f, 300f))) // straight up
+        assertEquals(1, state.segmentAt(Offset(700f, 500f))) // right
+        assertEquals(2, state.segmentAt(Offset(500f, 700f))) // down
+        assertEquals(3, state.segmentAt(Offset(300f, 500f))) // left
+        state.move(Offset(700f, 520f))
+        state.release()
+        assertEquals(listOf("B"), picked)
+        assertFalse(state.isOpen)
+
+        state.open(RadialRequest(title(1), options), haptics = null)
+        state.move(Offset(505f, 505f))
+        state.release()
+        assertTrue("lifting in the middle keeps it open for taps", state.isOpen)
     }
 
     @Test

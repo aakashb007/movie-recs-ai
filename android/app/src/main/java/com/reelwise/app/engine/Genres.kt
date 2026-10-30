@@ -51,7 +51,8 @@ object Genres {
         "documentaries" to "documentary", "docs" to "documentary", "thrillers" to "thriller",
         "suspense" to "thriller", "detective" to "mystery", "whodunit" to "mystery", "heist" to "crime",
         "gangster" to "crime", "magic" to "fantasy", "historical" to "history", "musical" to "music",
-        "cowboy" to "western", "children" to "kids",
+        "cowboy" to "western", "children" to "kids", "feel good" to "comedy", "feel-good" to "comedy",
+        "uplifting" to "comedy", "wholesome" to "family", "heartwarming" to "family",
     )
 
     fun table(mediaType: MediaType): Map<Int, String> = if (mediaType == MediaType.MOVIE) MOVIE else TV

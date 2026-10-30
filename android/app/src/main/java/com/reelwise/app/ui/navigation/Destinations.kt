@@ -7,6 +7,7 @@ object Dest {
     @Serializable data class Keys(val fromProfile: Boolean = false)
     @Serializable data object Onboarding
     @Serializable data object Home
+    @Serializable data object Browse
     @Serializable data object Ask
     @Serializable data object Watchlist
     @Serializable data object Profile

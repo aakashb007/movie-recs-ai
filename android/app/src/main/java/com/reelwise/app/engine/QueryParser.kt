@@ -86,6 +86,8 @@ Return only a JSON object with these keys:
   language: ISO 639-1 code or null (only if they ask for a language or country)
   summary: one short sentence restating the request
 Map moods to genres and keywords ("something cosy" -> comedy, family, keywords ["feel good"]).
+"Feel-good" or "uplifting" -> comedy, family, keywords ["feel good"], exclude_genres horror, thriller.
+"Classic", "old" or "cult" -> year_max 1999 (and keywords ["cult film"] for cult).
 """
 
         /** Clamp everything the model said to the vocabulary and ranges the rest of the system understands. */
@@ -144,11 +146,18 @@ Map moods to genres and keywords ("something cosy" -> comedy, family, keywords [
                 yearMax = yearMin!! + 9
             }
             if (Regex("""\b(recent|new|latest)\b""").containsMatchIn(text)) yearMin = 2020
+            if (Regex("""\b(classic|classics|old|cult|vintage)\b""").containsMatchIn(text) && yearMax == null) yearMax = 1999
+            val keywords = mutableListOf<String>()
+            if (Regex("""\bcult\b""").containsMatchIn(text)) keywords += "cult film"
+            if (Regex("""\b(feel[- ]good|uplifting|wholesome|heartwarming)\b""").containsMatchIn(text)) {
+                keywords += "feel good"
+                for (g in listOf("horror", "thriller")) if (g !in excluded && g !in found) excluded += g
+            }
             val minRating = if (Regex("""\b(acclaimed|best|great|top rated|highly rated|masterpiece)\b""").containsMatchIn(text)) 7.0 else null
             val refs = LIKE.findAll(query).map { it.groupValues[1].trim(' ', '\'', '"') }.toList()
             return sanitize(
                 QueryIntent(
-                    mediaType = media, genres = found, excludeGenres = excluded, referenceTitles = refs,
+                    mediaType = media, genres = found, excludeGenres = excluded, referenceTitles = refs, keywords = keywords,
                     yearMin = yearMin, yearMax = yearMax, minRating = minRating, summary = query,
                 ),
                 query,

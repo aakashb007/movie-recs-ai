@@ -2,6 +2,7 @@ package com.reelwise.app
 
 import com.reelwise.app.data.CachedFeed
 import com.reelwise.app.data.Repository
+import com.reelwise.app.data.SavedKeys
 import com.reelwise.app.data.local.InteractionEntity
 import com.reelwise.app.data.local.Settings
 import com.reelwise.app.data.local.ThemeMode
@@ -44,7 +45,7 @@ class FakeRepository : Repository {
     var onboardingTitles: List<TitleSummary> = emptyList()
     var searchResults: List<TitleSummary> = emptyList()
     val searches = mutableListOf<String>()
-    val keys = MutableStateFlow<Pair<String?, String?>>("tmdb-key" to null)
+    val keys = MutableStateFlow(SavedKeys(tmdb = "tmdb-key"))
     var rejectKeys = false
 
     /** 2026-09-22, so "new" (this year or last) means 2025 or later. */
@@ -53,15 +54,15 @@ class FakeRepository : Repository {
     override val settings: Flow<Settings> = settingsFlow
     override val interactions: Flow<List<InteractionEntity>> = interactionsFlow
     override val watchlist: Flow<List<WatchlistEntity>> = watchlistFlow
-    override val hasTmdbKey: Flow<Boolean> = keys.map { !it.first.isNullOrBlank() }
+    override val hasTmdbKey: Flow<Boolean> = keys.map { it.tmdb.isNotBlank() }
 
-    override suspend fun saveKeys(tmdbKey: String, groqKey: String?): Result<Unit> {
+    override suspend fun saveKeys(keys: SavedKeys): Result<Unit> {
         if (rejectKeys) return Result.failure(com.reelwise.app.engine.TmdbAuthException())
-        keys.value = tmdbKey to groqKey
+        this.keys.value = keys
         return Result.success(Unit)
     }
 
-    override suspend fun savedKeys(): Pair<String?, String?> = keys.value
+    override suspend fun savedKeys(): SavedKeys = keys.value
 
     override suspend fun search(query: String): Result<List<TitleSummary>> {
         searches += query

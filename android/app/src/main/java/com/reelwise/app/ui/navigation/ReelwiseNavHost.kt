@@ -2,6 +2,7 @@ package com.reelwise.app.ui.navigation
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -36,18 +37,23 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.ViewCarousel
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.ViewCarousel
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
@@ -68,10 +74,14 @@ import androidx.navigation.toRoute
 import com.reelwise.app.data.model.TitleSummary
 import com.reelwise.app.ui.ask.AskRoute
 import com.reelwise.app.ui.detail.DetailRoute
+import com.reelwise.app.ui.home.BrowseRoute
 import com.reelwise.app.ui.home.HomeRoute
 import com.reelwise.app.ui.keys.KeysRoute
 import com.reelwise.app.ui.onboarding.QuizRoute
 import com.reelwise.app.ui.profile.ProfileRoute
+import com.reelwise.app.ui.radial.LocalRadialMenu
+import com.reelwise.app.ui.radial.RadialMenuHost
+import com.reelwise.app.ui.radial.RadialMenuState
 import com.reelwise.app.ui.theme.BrandRed
 import com.reelwise.app.ui.watchlist.WatchlistRoute
 
@@ -85,6 +95,7 @@ private class Tab(
 
 private val tabs = listOf(
     Tab(Dest.Home, { it.hasRoute<Dest.Home>() }, "For you", Icons.Rounded.Home, Icons.Outlined.Home),
+    Tab(Dest.Browse, { it.hasRoute<Dest.Browse>() }, "Browse", Icons.Rounded.ViewCarousel, Icons.Outlined.ViewCarousel),
     Tab(Dest.Ask, { it.hasRoute<Dest.Ask>() }, "Ask", Icons.Rounded.AutoAwesome, Icons.Outlined.AutoAwesome),
     Tab(Dest.Watchlist, { it.hasRoute<Dest.Watchlist>() }, "My list", Icons.Rounded.Bookmark, Icons.Outlined.BookmarkBorder),
     Tab(Dest.Profile, { it.hasRoute<Dest.Profile>() }, "Profile", Icons.Rounded.Person, Icons.Outlined.Person),
@@ -108,7 +119,11 @@ fun ReelwiseNavHost(start: Start, navController: NavHostController = rememberNav
         navController.navigate(route) { popUpTo(navController.graph.id) { inclusive = true } }
     }
 
+    val radial = remember { RadialMenuState() }
+    val blur by animateDpAsState(if (radial.isOpen) 18.dp else 0.dp, tween(220), label = "blur")
+    CompositionLocalProvider(LocalRadialMenu provides radial) {
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+      Box(Modifier.fillMaxSize().blur(blur)) {
         NavHost(
             navController = navController,
             startDestination = when (start) {
@@ -133,6 +148,13 @@ fun ReelwiseNavHost(start: Start, navController: NavHostController = rememberNav
             composable<Dest.Onboarding> { QuizRoute(onFinished = { startFresh(Dest.Home) }) }
             composable<Dest.Home> {
                 HomeRoute(
+                    onOpenTitle = openTitle,
+                    onRateMore = { navController.navigate(Dest.Onboarding) },
+                    onSearch = { goToTab(Dest.Ask) },
+                )
+            }
+            composable<Dest.Browse> {
+                BrowseRoute(
                     onOpenTitle = openTitle,
                     onRateMore = { navController.navigate(Dest.Onboarding) },
                     onSearch = { goToTab(Dest.Ask) },
@@ -165,6 +187,10 @@ fun ReelwiseNavHost(start: Start, navController: NavHostController = rememberNav
         ) {
             FloatingNav(destination, goToTab)
         }
+      }
+        // Above everything, including the bottom bar; the app behind it is blurred.
+        RadialMenuHost(radial)
+    }
     }
 }
 

@@ -16,6 +16,18 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 
+/** IMDb scores for TMDB titles, when the person has set that up (an OMDb key). */
+interface ImdbLookup {
+    suspend fun available(): Boolean
+    suspend fun score(type: MediaType, id: Int): com.reelwise.app.data.model.ImdbScore?
+}
+
+/** IMDb via TMDB's IMDb id plus OMDb's score for it. */
+class OmdbImdbLookup(private val tmdb: TmdbClient, private val omdb: OmdbClient) : ImdbLookup {
+    override suspend fun available() = omdb.hasKey()
+    override suspend fun score(type: MediaType, id: Int) = tmdb.imdbId(type, id)?.let { omdb.score(it) }
+}
+
 /**
  * Turns a person's ratings, taste profile or typed request into a ranked, explained list of
  * real TMDB titles. Port of backend/app/service.py, running on the phone.
@@ -27,6 +39,7 @@ import kotlinx.coroutines.coroutineScope
  */
 class Recommender(
     private val tmdb: TmdbClient,
+    private val imdb: ImdbLookup? = null,
     private val currentYear: () -> Int = { Calendar.getInstance().get(Calendar.YEAR) },
 ) {
     class Candidate(
@@ -34,6 +47,9 @@ class Recommender(
         val seedVotes: MutableMap<TitleKey, Double> = mutableMapOf(),
         var facets: List<String> = emptyList(),
     )
+
+    /** The feed's special shelves, chosen with the Feel-good and Classics chips. */
+    enum class Mode { NONE, FEEL_GOOD, CLASSICS }
 
     /** Feed recommendations; returns the items and the strategy used ("personalized" or "cold_start"). */
     suspend fun recommend(
@@ -53,17 +69,27 @@ class Recommender(
         val seen = latest.values.filter { it.signal == Signal.SEEN }
         val dislikes = latest.values.filter { it.signal == Signal.DISLIKE }
         val kinds = kindsFor(filter)
+        val mode = modeOf(filter)
+        val shelfTaste = when (mode) {
+            Mode.CLASSICS -> taste.copy(freshness = Freshness.CLASSICS)
+            Mode.FEEL_GOOD -> taste.copy(avoidedGenres = (taste.avoidedGenres + FEEL_GOOD_BANNED).distinct())
+            Mode.NONE -> taste
+        }
+        // Rank extra candidates when a rating filter will remove some afterwards.
+        val rankSize = if (taste.minRating != null) limit * 2 else limit
         // Loved titles lead; with none, titles merely watched still say a lot about taste.
         val seeds = likes.takeLast(SEEDS).ifEmpty { seen.takeLast(SEEDS - 2) }
         val watchedOnly = likes.isEmpty()
 
         if (seeds.isEmpty() && taste.lovedGenres.isEmpty()) {
-            return@coroutineScope coldStart(excluded, kinds, taste, limit) to "cold_start"
+            val items = coldStart(excluded, kinds, shelfTaste, mode, rankSize)
+            return@coroutineScope applyRating(items, taste.minRating, limit) to "cold_start"
         }
 
         val seedTitles = async { summaries((seeds + dislikes.takeLast(SEEDS)).map { TitleKey(it.id, it.mediaType) }) }
         val recLists = seeds.map { s -> async { s to tmdb.recommendations(s.mediaType, s.id) } }
-        val genreLists = kinds.map { k -> async { tasteDiscover(k, taste) } }
+        val genreLists = kinds.map { k -> async { tasteDiscover(k, shelfTaste) } }
+        val shelfLists = kinds.map { k -> async { shelfDiscover(k, mode, shelfTaste) } }
 
         val candidates = LinkedHashMap<TitleKey, Candidate>()
         for ((seed, recs) in recLists.awaitAll()) {
@@ -75,62 +101,158 @@ class Recommender(
         for (titles in genreLists.awaitAll()) {
             for (t in titles) candidates.getOrPut(t.key) { Candidate(t) }
         }
+        for (titles in shelfLists.awaitAll()) {
+            for ((t, label) in titles) candidates.getOrPut(t.key) { Candidate(t) }.facets = listOf(label)
+        }
 
         val seedKeys = seeds.map { TitleKey(it.id, it.mediaType) }.toSet()
         val fetched = seedTitles.await()
         val liked = fetched.filter { it.key in seedKeys }
         val disliked = fetched.filterNot { it.key in seedKeys }
-        val pool = candidates.filter { (k, c) -> k !in excluded && k.mediaType in kinds && passes(c.title, taste) }.values.toList()
-        rank(pool, liked, disliked, taste, limit, watchedOnly = watchedOnly) to "personalized"
+        val pool = candidates.filter { (k, c) ->
+            k !in excluded && k.mediaType in kinds && passes(c.title, shelfTaste) && fits(c.title, mode)
+        }.values.toList()
+        val ranked = rank(pool, liked, disliked, shelfTaste, rankSize, watchedOnly = watchedOnly)
+        applyRating(ranked, taste.minRating, limit) to "personalized"
     }
 
-    private suspend fun coldStart(excluded: Set<TitleKey>, kinds: List<MediaType>, taste: TasteProfile, limit: Int): List<RecItem> =
-        coroutineScope {
+    private suspend fun coldStart(
+        excluded: Set<TitleKey>,
+        kinds: List<MediaType>,
+        taste: TasteProfile,
+        mode: Mode,
+        limit: Int,
+    ): List<RecItem> = coroutineScope {
+        val pool = LinkedHashMap<TitleKey, Candidate>()
+        if (mode == Mode.NONE) {
             val trending = kinds.map { k -> async { tmdb.trending(k) } }
             val top = kinds.map { k -> async { tmdb.topRated(k) } }
-            val pool = LinkedHashMap<TitleKey, Candidate>()
             trending.awaitAll().flatten().forEach { pool.getOrPut(it.key) { Candidate(it, facets = listOf("Trending this week")) } }
             top.awaitAll().flatten().forEach { pool.getOrPut(it.key) { Candidate(it, facets = listOf("All-time favourite")) } }
-            val usable = pool.filter { (k, c) -> k !in excluded && passes(c.title, taste) }.values.toList()
-            rank(usable, emptyList(), emptyList(), taste, limit)
+        } else {
+            kinds.map { k -> async { shelfDiscover(k, mode, taste) } }.awaitAll().flatten()
+                .forEach { (t, label) -> pool.getOrPut(t.key) { Candidate(t, facets = listOf(label)) } }
         }
+        val usable = pool.filter { (k, c) -> k !in excluded && passes(c.title, taste) && fits(c.title, mode) }.values.toList()
+        rank(usable, emptyList(), emptyList(), taste, limit)
+    }
 
     /** Titles from the person's loved genres, inside their freshness and language choices. */
     private suspend fun tasteDiscover(type: MediaType, taste: TasteProfile): List<TitleSummary> {
         val loved = Genres.idsFor(taste.lovedGenres, type)
         if (loved.isEmpty()) return emptyList()
-        val dateField = if (type == MediaType.MOVIE) "primary_release_date" else "first_air_date"
+        val classics = taste.freshness == Freshness.CLASSICS
         val base = mapOf(
-            "sort_by" to "popularity.desc",
+            "sort_by" to if (classics) "vote_count.desc" else "popularity.desc",
             "vote_count.gte" to "50",
             "with_genres" to loved.joinToString("|"),
             "without_genres" to Genres.idsFor(taste.avoidedGenres, type).joinToString(",").ifEmpty { null },
-            "$dateField.gte" to minYear(taste)?.let { "$it-01-01" },
-        )
+        ) + dateParams(type, taste)
+        return perLanguage(type, base, taste)
+    }
+
+    /** Candidates for the Feel-good and Classics shelves, each with the label its reason shows. */
+    private suspend fun shelfDiscover(type: MediaType, mode: Mode, taste: TasteProfile): List<Pair<TitleSummary, String>> {
+        val avoid = Genres.idsFor(taste.avoidedGenres, type).joinToString(",").ifEmpty { null }
+        return when (mode) {
+            Mode.NONE -> emptyList()
+            Mode.FEEL_GOOD -> coroutineScope {
+                val base = mapOf(
+                    "sort_by" to "popularity.desc",
+                    "vote_count.gte" to if (type == MediaType.MOVIE) "200" else "100",
+                    "vote_average.gte" to if (type == MediaType.MOVIE) "6.8" else "7.0",
+                    "with_genres" to Genres.idsFor(FEEL_GOOD_GENRES, type).joinToString("|"),
+                    "without_genres" to avoid,
+                ) + dateParams(type, taste)
+                val byGenre = async { perLanguage(type, base, taste) }
+                val byKeyword = async {
+                    tmdb.keywordId("feel-good")?.let { kw -> tmdb.discover(type, base - "with_genres" + ("with_keywords" to kw.toString())) }.orEmpty()
+                }
+                (byKeyword.await() + byGenre.await()).map { it to "Feel-good" }
+            }
+            Mode.CLASSICS -> coroutineScope {
+                val base = mapOf(
+                    "sort_by" to "vote_count.desc",
+                    "vote_count.gte" to if (type == MediaType.MOVIE) "400" else "100",
+                    "vote_average.gte" to "7.0",
+                    "with_genres" to Genres.idsFor(taste.lovedGenres, type).joinToString("|").ifEmpty { null },
+                    "without_genres" to avoid,
+                ) + dateParams(type, taste)
+                val loved = async { perLanguage(type, base, taste) }
+                val anyGenre = async { tmdb.discover(type, base + ("with_genres" to null)) }
+                val cult = async {
+                    tmdb.keywordId("cult film")?.let { kw ->
+                        tmdb.discover(type, base + ("with_genres" to null) + ("with_keywords" to kw.toString()) + ("vote_average.gte" to "6.5"))
+                    }.orEmpty()
+                }
+                cult.await().map { it to "Cult classic" } + (loved.await() + anyGenre.await()).map { it to "Classic" }
+            }
+        }
+    }
+
+    private suspend fun perLanguage(type: MediaType, base: Map<String, String?>, taste: TasteProfile): List<TitleSummary> {
         val languages = taste.languages.take(3).ifEmpty { listOf(null) }
         return coroutineScope {
             languages.map { lang -> async { tmdb.discover(type, base + ("with_original_language" to lang)) } }.awaitAll().flatten()
         }
     }
 
-    private fun minYear(taste: TasteProfile): Int? = when (taste.freshness) {
-        Freshness.LATEST -> currentYear() - 2
-        Freshness.RECENT -> currentYear() - 10
-        Freshness.ANY -> null
+    private fun dateParams(type: MediaType, taste: TasteProfile): Map<String, String?> {
+        val field = if (type == MediaType.MOVIE) "primary_release_date" else "first_air_date"
+        val (min, max) = yearRange(taste)
+        return mapOf("$field.gte" to min?.let { "$it-01-01" }, "$field.lte" to max?.let { "$it-12-31" })
+    }
+
+    private fun yearRange(taste: TasteProfile): Pair<Int?, Int?> = when (taste.freshness) {
+        Freshness.LATEST -> currentYear() - 2 to null
+        Freshness.RECENT -> currentYear() - 10 to null
+        Freshness.ANY -> null to null
+        Freshness.CLASSICS -> null to CLASSICS_LAST_YEAR
     }
 
     /** Hard constraints from the taste quiz: avoided genres, freshness and languages. */
     fun passes(t: TitleSummary, taste: TasteProfile): Boolean {
         if (t.genres.any { it in Genres.bannedNames(taste.avoidedGenres, t.mediaType) }) return false
-        minYear(taste)?.let { min -> if ((t.year ?: 0) < min) return false }
+        val (min, max) = yearRange(taste)
+        if (min != null && (t.year ?: 0) < min) return false
+        if (max != null && (t.year ?: Int.MAX_VALUE) > max) return false
         if (taste.languages.isNotEmpty() && t.originalLanguage != null && t.originalLanguage !in taste.languages) return false
         return true
+    }
+
+    private fun fits(t: TitleSummary, mode: Mode): Boolean = when (mode) {
+        Mode.FEEL_GOOD -> t.genres.any { it in Genres.displayNames(FEEL_GOOD_GENRES, t.mediaType) }
+        else -> true
+    }
+
+    /**
+     * Applies the minimum rating and fills in IMDb scores. With an OMDb key the filter uses IMDb
+     * (falling back to TMDB for titles IMDb doesn't rate); without one it uses TMDB. Without a
+     * filter, only the first few (the big cards) are looked up, to spare the OMDb daily quota.
+     */
+    private suspend fun applyRating(items: List<RecItem>, min: Double?, limit: Int): List<RecItem> = coroutineScope {
+        val useImdb = imdb != null && imdb.available()
+        val checked = if (!useImdb) {
+            items
+        } else {
+            val lookups = if (min == null) items.take(IMDB_PREVIEW) else items
+            val scores = lookups.map { r -> async { r.title.key to imdb!!.score(r.title.mediaType, r.title.id) } }.awaitAll().toMap()
+            items.map { r -> scores[r.title.key]?.let { r.copy(title = r.title.copy(imdbRating = it.rating)) } ?: r }
+        }
+        val kept = if (min == null) checked else checked.filter { (it.title.imdbRating ?: it.title.voteAverage) >= min }
+        kept.take(limit)
     }
 
     private fun kindsFor(filter: String) = when (filter) {
         "movie" -> listOf(MediaType.MOVIE)
         "tv" -> listOf(MediaType.TV)
         else -> listOf(MediaType.MOVIE, MediaType.TV)
+    }
+
+    private fun modeOf(filter: String) = when (filter) {
+        "feelgood" -> Mode.FEEL_GOOD
+        "classics" -> Mode.CLASSICS
+        else -> Mode.NONE
     }
 
     fun rank(
@@ -316,6 +438,10 @@ class Recommender(
 
     companion object {
         const val SEEDS = 8
+        const val CLASSICS_LAST_YEAR = 1999
+        const val IMDB_PREVIEW = 8
+        val FEEL_GOOD_GENRES = listOf("comedy", "family", "animation", "romance", "music", "kids")
+        val FEEL_GOOD_BANNED = listOf("horror", "thriller", "war", "crime")
         const val W_CONTENT = 0.35
         const val W_VOTES = 0.30
         const val W_GENRE = 0.15

@@ -50,6 +50,7 @@ data class QuizUiState(
     val freshness: Freshness = Freshness.RECENT,
     val mix: Mix = Mix.BOTH,
     val languages: Set<String> = emptySet(),
+    val minRating: Double? = null,
     val saving: Boolean = false,
     val done: Boolean = false,
 ) {
@@ -71,10 +72,11 @@ data class QuizUiState(
         }
 
     val taste: TasteProfile
-        get() = TasteProfile(lovedGenres, avoidedGenres, freshness, mix, LANGUAGES.filter { it.code in languages }.map { it.code })
+        get() = TasteProfile(lovedGenres, avoidedGenres, freshness, mix, LANGUAGES.filter { it.code in languages }.map { it.code }, minRating)
 
     companion object {
         const val MIN_WATCHED = 3
+        val RATINGS = listOf(null, 6.0, 7.0, 7.5, 8.0)
         val GENRES = listOf(
             GenreOption("Sci-Fi", "science fiction"), GenreOption("Thriller", "thriller"), GenreOption("Mystery", "mystery"),
             GenreOption("Crime", "crime"), GenreOption("Drama", "drama"), GenreOption("Comedy", "comedy"),
@@ -127,6 +129,7 @@ class QuizViewModel @Inject constructor(private val repository: Repository) : Vi
                 freshness = if (taste == TasteProfile()) s.freshness else taste.freshness,
                 mix = taste.mix,
                 languages = taste.languages.toSet(),
+                minRating = taste.minRating,
             )
         }
     }
@@ -166,6 +169,7 @@ class QuizViewModel @Inject constructor(private val repository: Repository) : Vi
 
     fun setFreshness(value: Freshness) = _state.update { it.copy(freshness = value) }
     fun setMix(value: Mix) = _state.update { it.copy(mix = value) }
+    fun setMinRating(value: Double?) = _state.update { it.copy(minRating = value) }
     fun toggleLanguage(code: String?) = _state.update { s ->
         when {
             code == null -> s.copy(languages = emptySet())

@@ -65,4 +65,14 @@ class ParserAndMathTest {
         assertTrue(Genres.bannedNames(listOf("science fiction"), com.reelwise.app.data.model.MediaType.TV).isEmpty())
         assertEquals(setOf("Sci-Fi & Fantasy"), Genres.bannedNames(listOf("science fiction", "fantasy"), com.reelwise.app.data.model.MediaType.TV))
     }
+
+    @Test
+    fun `rules understand feel-good and old cult classics`() {
+        val feel = QueryParser.parseWithRules("feel good movies for tonight")
+        assertTrue("comedy" in feel.genres)
+        assertTrue(feel.excludeGenres.containsAll(listOf("horror", "thriller")))
+        val cult = QueryParser.parseWithRules("old cult classics")
+        assertEquals(1999, cult.yearMax)
+        assertEquals(listOf("cult film"), cult.keywords)
+    }
 }

@@ -32,6 +32,9 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
+/** The person's API keys; blank means not set. */
+data class SavedKeys(val tmdb: String = "", val groq: String = "", val omdb: String = "")
+
 /** A cached feed and when it was fetched. */
 data class CachedFeed(val response: RecommendationResponse, val fetchedAt: Long)
 
@@ -41,9 +44,9 @@ interface Repository {
     val watchlist: Flow<List<WatchlistEntity>>
     val hasTmdbKey: Flow<Boolean>
 
-    /** Checks the TMDB key against TMDB, then stores both keys on the phone. */
-    suspend fun saveKeys(tmdbKey: String, groqKey: String?): Result<Unit>
-    suspend fun savedKeys(): Pair<String?, String?>
+    /** Checks the TMDB key against TMDB, then stores the keys on the phone. */
+    suspend fun saveKeys(keys: SavedKeys): Result<Unit>
+    suspend fun savedKeys(): SavedKeys
     suspend fun search(query: String): Result<List<TitleSummary>>
 
     /**
@@ -86,13 +89,14 @@ class DefaultRepository @Inject constructor(
     override val watchlist: Flow<List<WatchlistEntity>> = db.watchlist().observeAll()
     override val hasTmdbKey: Flow<Boolean> = keyStore.hasTmdbKey
 
-    override suspend fun saveKeys(tmdbKey: String, groqKey: String?): Result<Unit> = safely {
-        tmdb.checkKey(tmdbKey)
-        keyStore.save(tmdbKey, groqKey)
+    override suspend fun saveKeys(keys: SavedKeys): Result<Unit> = safely {
+        tmdb.checkKey(keys.tmdb)
+        keyStore.save(keys.tmdb, keys.groq, keys.omdb)
         db.feed().clear()
     }
 
-    override suspend fun savedKeys(): Pair<String?, String?> = keyStore.tmdbKey() to keyStore.groqKey()
+    override suspend fun savedKeys(): SavedKeys =
+        SavedKeys(keyStore.tmdbKey().orEmpty(), keyStore.groqKey().orEmpty(), keyStore.omdbKey().orEmpty())
 
     override suspend fun search(query: String): Result<List<TitleSummary>> = safely { api.search(query.trim()) }
 

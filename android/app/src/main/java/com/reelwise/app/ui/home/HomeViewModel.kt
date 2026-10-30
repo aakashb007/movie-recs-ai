@@ -36,7 +36,9 @@ data class FeedSection(val eyebrow: String?, val title: String, val items: List<
 
 data class HomeUiState(
     val filter: FeedFilter = FeedFilter.ALL,
-    val hero: List<RecItem> = emptyList(),
+    /** Every pick in rank order: the For you swiper. */
+    val items: List<RecItem> = emptyList(),
+    /** The same picks grouped into rows: the Browse tab. */
     val sections: List<FeedSection> = emptyList(),
     val coldStart: Boolean = false,
     val refreshing: Boolean = false,
@@ -114,11 +116,10 @@ class HomeViewModel @Inject constructor(
         // Rated or dismissed titles vanish at once; the re-ranked list follows a moment later.
         val items = feed?.response?.items.orEmpty().filterNot { it.title.key in hidden }
         val year = currentYear()
-        val (hero, sections) = buildSections(items, year)
         HomeUiState(
             filter = f,
-            hero = hero,
-            sections = sections,
+            items = items,
+            sections = buildSections(items, year, heroSize = 0).second,
             coldStart = feed?.response?.strategy == "cold_start",
             refreshing = isRefreshing,
             firstLoad = feed == null && err == null,

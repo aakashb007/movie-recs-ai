@@ -15,6 +15,8 @@ import com.reelwise.app.data.local.ReelwiseDatabase
 import com.reelwise.app.data.remote.LocalReelwiseApi
 import com.reelwise.app.data.remote.ReelwiseApi
 import com.reelwise.app.engine.KeyProvider
+import com.reelwise.app.engine.OmdbClient
+import com.reelwise.app.engine.OmdbImdbLookup
 import com.reelwise.app.engine.QueryParser
 import com.reelwise.app.engine.Recommender
 import com.reelwise.app.engine.TmdbClient
@@ -61,8 +63,10 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun api(client: OkHttpClient, keys: KeyProvider, json: Json, tmdb: TmdbClient): ReelwiseApi =
-        LocalReelwiseApi(tmdb, Recommender(tmdb), QueryParser(client, keys, json))
+    fun api(client: OkHttpClient, keys: KeyProvider, json: Json, tmdb: TmdbClient): ReelwiseApi {
+        val imdb = OmdbImdbLookup(tmdb, OmdbClient(client, keys, json))
+        return LocalReelwiseApi(tmdb, Recommender(tmdb, imdb), QueryParser(client, keys, json), imdb)
+    }
 
     @Provides
     @Singleton

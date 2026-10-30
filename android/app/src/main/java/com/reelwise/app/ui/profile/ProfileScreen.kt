@@ -241,7 +241,8 @@ fun ProfileContent(
                 Text(
                     "This product uses the TMDB API but is not endorsed or certified by TMDB. " +
                         "Streaming availability is provided by JustWatch. Recommendations are worked out " +
-                        "on this phone from your ratings and TMDB data; typed requests can use Groq.",
+                        "on this phone from your ratings and TMDB data; typed requests can use Groq, and IMDb " +
+                        "ratings come from OMDb when you add a key.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -251,6 +252,8 @@ fun ProfileContent(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Spacer(Modifier.height(10.dp))
+                Text("Made by Aakash Saleem", style = MaterialTheme.typography.titleSmall)
             }
         }
     }
